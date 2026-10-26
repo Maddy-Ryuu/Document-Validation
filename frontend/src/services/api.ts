@@ -179,4 +179,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  updateInstitution: (id: string, payload: Partial<CreateInstitutionPayload>) =>
+    request<Institution>(`/institutions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
 };

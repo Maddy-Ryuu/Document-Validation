@@ -70,9 +70,18 @@ export const NewInstitutionModal: React.FC<NewInstitutionModalProps> = ({
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded text-xs text-status-error flex items-start gap-2">
+            <div className={`p-3 rounded text-xs flex items-start gap-2.5 border ${
+              error.toLowerCase().includes("already exists") || error.toLowerCase().includes("conflict")
+                ? "bg-amber-50 border-amber-300 text-amber-900"
+                : "bg-red-50 border-red-200 text-status-error"
+            }`}>
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
+              <div>
+                {(error.toLowerCase().includes("already exists") || error.toLowerCase().includes("conflict")) && (
+                  <p className="font-bold text-[11px] mb-0.5">Duplicate Registration Conflict</p>
+                )}
+                <span>{error}</span>
+              </div>
             </div>
           )}
 

@@ -1,5 +1,7 @@
 import uuid
+import re
 from datetime import datetime
+from typing import Optional
 from sqlalchemy import (
     Column,
     String,
@@ -12,6 +14,8 @@ from sqlalchemy import (
     JSON,
     LargeBinary,
     Index,
+    UniqueConstraint,
+    event,
 )
 from sqlalchemy.orm import relationship
 from app.db.session import Base
@@ -19,6 +23,13 @@ from app.db.session import Base
 
 def generate_uuid() -> str:
     return str(uuid.uuid4())
+
+
+def normalize_institution_field(val: Optional[str]) -> str:
+    """Normalizes institution fields: trims whitespace, collapses internal spaces, and lowercases."""
+    if not val:
+        return ""
+    return re.sub(r"\s+", " ", val.strip()).lower()
 
 
 class User(Base):
@@ -42,6 +53,9 @@ class User(Base):
 
 class Institution(Base):
     __tablename__ = "institutions"
+    __table_args__ = (
+        UniqueConstraint("normalized_name", "normalized_city", "normalized_state", name="uq_institutions_normalized_location"),
+    )
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     institution_identifier = Column(String(100), unique=True, nullable=False, index=True)
@@ -49,10 +63,30 @@ class Institution(Base):
     institution_type = Column(String(100), nullable=False)  # Engineering, Management, Pharmacy, Polytechnic
     state = Column(String(100), nullable=False)
     city = Column(String(100), nullable=False)
+    normalized_name = Column(String(255), nullable=False, index=True)
+    normalized_city = Column(String(100), nullable=False, index=True)
+    normalized_state = Column(String(100), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     applications = relationship("Application", back_populates="institution", cascade="all, delete-orphan")
+
+
+@event.listens_for(Institution, "before_insert")
+def populate_normalized_fields_before_insert(mapper, connection, target):
+    target.normalized_name = normalize_institution_field(target.name)
+    target.normalized_city = normalize_institution_field(target.city)
+    target.normalized_state = normalize_institution_field(target.state)
+
+
+@event.listens_for(Institution, "before_update")
+def populate_normalized_fields_before_update(mapper, connection, target):
+    if target.name:
+        target.normalized_name = normalize_institution_field(target.name)
+    if target.city:
+        target.normalized_city = normalize_institution_field(target.city)
+    if target.state:
+        target.normalized_state = normalize_institution_field(target.state)
 
 
 class Application(Base):

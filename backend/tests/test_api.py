@@ -83,8 +83,8 @@ def test_duplicate_institution_protection():
         "city": "New Delhi"
     }
     res = client.post("/api/institutions", json=payload)
-    assert res.status_code == 400
-    assert "already exists" in res.json()["detail"]
+    assert res.status_code in (400, 409)
+    assert "already exists" in res.json()["detail"].lower()
 
 
 def test_application_creation_and_kpi_update():

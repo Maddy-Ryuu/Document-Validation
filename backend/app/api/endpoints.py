@@ -17,7 +17,12 @@ from app.models.models import (
     Finding,
     ValidationRun,
 )
-from app.services.services import ApplicationService, InstitutionService, DashboardService
+from app.services.services import (
+    ApplicationService,
+    InstitutionService,
+    DashboardService,
+    DuplicateInstitutionError,
+)
 from app.services.storage import get_storage_service
 from app.services.checklist import get_checklist_for_application
 from app.services.compliance_engine import ComplianceEngine
@@ -37,6 +42,7 @@ from app.schemas.schemas import (
     ApplicationUpdate,
     ApplicationResponse,
     InstitutionCreate,
+    InstitutionUpdate,
     InstitutionResponse,
     DocumentResponse,
     DocumentExtractionResponse,
@@ -159,10 +165,25 @@ def create_institution(inst_in: InstitutionCreate, db: Session = Depends(get_db)
     try:
         inst = InstitutionService.create_institution(db, inst_in)
         return inst
+    except DuplicateInstitutionError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create institution: {str(e)}")
+
+
+@router.patch("/institutions/{institution_id}", response_model=InstitutionResponse, tags=["Institutions"])
+def update_institution(institution_id: str, inst_in: InstitutionUpdate, db: Session = Depends(get_db)):
+    try:
+        inst = InstitutionService.update_institution(db, institution_id, inst_in)
+        return inst
+    except DuplicateInstitutionError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update institution: {str(e)}")
 
 
 # =========================================================================

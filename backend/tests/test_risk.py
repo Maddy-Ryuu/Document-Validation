@@ -39,7 +39,16 @@ def setup_test_application(inst_name="Apex Institute of Technology & Advanced St
         "state": "Maharashtra",
         "city": "Pune",
     })
-    inst_id = inst_res.json()["id"]
+    if inst_res.status_code == 201:
+        inst_id = inst_res.json()["id"]
+    else:
+        # If institution already exists, retrieve existing institution ID
+        all_insts = client.get("/api/institutions?limit=100").json()["items"]
+        matching = [i for i in all_insts if i["name"].strip().lower() == inst_name.strip().lower()]
+        if matching:
+            inst_id = matching[0]["id"]
+        else:
+            inst_id = inst_res.json()["id"]
 
     app_res = client.post("/api/applications", json={
         "institution_id": inst_id,

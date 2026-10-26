@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+import re
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 # User Schemas
@@ -31,9 +32,53 @@ class InstitutionBase(BaseModel):
     state: str = Field(..., min_length=2, max_length=100)
     city: str = Field(..., min_length=2, max_length=100)
 
+    @field_validator("institution_identifier")
+    @classmethod
+    def validate_identifier(cls, v: str) -> str:
+        cleaned = v.strip().upper()
+        if not cleaned:
+            raise ValueError("Institution identifier cannot be empty")
+        return cleaned
+
+    @field_validator("name", "city", "state")
+    @classmethod
+    def validate_strings(cls, v: str) -> str:
+        cleaned = re.sub(r"\s+", " ", v.strip())
+        if not cleaned:
+            raise ValueError("Field cannot be empty or whitespace only")
+        return cleaned
+
 
 class InstitutionCreate(InstitutionBase):
     pass
+
+
+class InstitutionUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=3, max_length=255)
+    institution_type: Optional[str] = Field(None, min_length=2, max_length=100)
+    state: Optional[str] = Field(None, min_length=2, max_length=100)
+    city: Optional[str] = Field(None, min_length=2, max_length=100)
+    institution_identifier: Optional[str] = Field(None, min_length=2, max_length=100)
+
+    @field_validator("institution_identifier")
+    @classmethod
+    def validate_identifier(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            cleaned = v.strip().upper()
+            if not cleaned:
+                raise ValueError("Institution identifier cannot be empty")
+            return cleaned
+        return v
+
+    @field_validator("name", "city", "state")
+    @classmethod
+    def validate_strings(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            cleaned = re.sub(r"\s+", " ", v.strip())
+            if not cleaned:
+                raise ValueError("Field cannot be empty or whitespace only")
+            return cleaned
+        return v
 
 
 class InstitutionResponse(InstitutionBase):
