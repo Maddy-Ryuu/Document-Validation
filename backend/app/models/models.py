@@ -10,6 +10,7 @@ from sqlalchemy import (
     Float,
     Text,
     JSON,
+    LargeBinary,
     Index,
 )
 from sqlalchemy.orm import relationship
@@ -283,3 +284,14 @@ class Notification(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     user = relationship("User", back_populates="notifications")
+
+
+class DocumentBlob(Base):
+    __tablename__ = "document_blobs"
+
+    storage_key = Column(String(500), primary_key=True)
+    file_data = Column(LargeBinary, nullable=False)
+    sha256_hash = Column(String(64), nullable=False)
+    file_size_bytes = Column(Integer, nullable=False)
+    content_type = Column(String(100), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

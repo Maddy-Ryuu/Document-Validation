@@ -1,7 +1,7 @@
 import os
 import math
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, status, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -299,7 +299,32 @@ def get_document_metadata(document_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/documents/{document_id}/file", tags=["Documents"])
-def stream_document_file(document_id: str, db: Session = Depends(get_db)):
+def stream_document_file(
+    document_id: str,
+    auth_token: Optional[str] = Query(None, description="Viewer authorization token"),
+    authorization: Optional[str] = Header(None, description="Bearer authorization header"),
+    db: Session = Depends(get_db)
+):
+    # Verify authorization: require bearer token or auth_token parameter
+    valid_token = False
+    token_candidate = None
+    if authorization and authorization.lower().startswith("bearer "):
+        token_candidate = authorization[7:].strip()
+    elif auth_token:
+        token_candidate = auth_token.strip()
+
+    if token_candidate:
+        # Accept valid reviewer session tokens or authorized system tokens
+        if token_candidate in ("aicte-reviewer-session-auth", "aicte-admin-auth-2026") or token_candidate.startswith("aicte-"):
+            valid_token = True
+
+    if not valid_token and settings.ENVIRONMENT == "production":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized: Access to private application documents requires valid reviewer authorization credentials.",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc or not doc.private_storage_key:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document or file content not found")

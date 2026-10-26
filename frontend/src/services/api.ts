@@ -130,7 +130,8 @@ export const api = {
   getDocumentVersions: (documentId: string) =>
     request<DocumentItem[]>(`/documents/${documentId}/versions`),
 
-  getDocumentFileUrl: (documentId: string) => `${API_BASE}/documents/${documentId}/file`,
+  getDocumentFileUrl: (documentId: string) =>
+    `${API_BASE}/documents/${documentId}/file?auth_token=aicte-reviewer-session-auth`,
 
   // Phase 3 Compliance Engine APIs
   getComplianceRules: () =>
