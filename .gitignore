@@ -1,0 +1,33 @@
+# Environments and dependencies
+.venv/
+venv/
+ENV/
+env/
+node_modules/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Frontend build outputs
+dist/
+dist-ssr/
+*.local
+
+# Environment variables
+.env
+.env.production
+.env.local
+*.env
+
+# Document uploads in development (don't commit raw storage)
+backend/storage/documents/*
+!backend/storage/documents/.gitkeep
+
+# System files
+*.db
+.DS_Store
+Thumbs.db

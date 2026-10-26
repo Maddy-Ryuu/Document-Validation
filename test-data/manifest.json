@@ -1,0 +1,322 @@
+{
+  "project": "AICTE Application Validation & Compliance Verification Platform",
+  "phase": 2,
+  "generated_at": "2026-10-26T19:46:00Z",
+  "disclaimer": "SYNTHETIC TEST DOCUMENT — NOT AN OFFICIAL RECORD. Generated strictly for automated testing and validation benchmarking. All institutional names, persons, addresses, and identifiers are fictional.",
+  "target_application_context": {
+    "institution_name": "Apex Institute of Technology & Advanced Studies",
+    "institution_identifier": "1-3329014521",
+    "application_identifier": "AICTE-2026-88412",
+    "academic_year": "2026-2027",
+    "category": "Extension of Approval (EoA)",
+    "location": "Pune, Maharashtra"
+  },
+  "test_documents": [
+    {
+      "file_path": "test-data/standard-pack/01_institution_profile.pdf",
+      "filename": "01_institution_profile.pdf",
+      "category": "standard-pack",
+      "document_type": "Institution Profile / Land Ownership & Sanctions",
+      "file_size_bytes": 18062,
+      "sha256": "77921048e697a5a87ba2df625a5857e4e1121d51a9e88d8b4e723dd13ae30e2f",
+      "is_raster_scanned": false,
+      "synthetic_notice_verified": true,
+      "expected_extracted_fields": {
+        "institution_name": "Apex Institute of Technology & Advanced Studies",
+        "institution_identifier": "1-3329014521",
+        "application_reference": "AICTE-2026-88412",
+        "sponsoring_trust": "Apex Educational & Charitable Research Foundation",
+        "land_area": "5.25",
+        "land_area_unit": "Acres",
+        "survey_number": "142/2A and 142/2B",
+        "built_up_area_sqm": "14,850",
+        "head_of_institution": "Dr. Arvind R. Kulkarni",
+        "director_faculty_id": "AICTE-FAC-2018-9941"
+      },
+      "intended_validation_outcome": "PASS",
+      "expected_findings": [],
+      "verification_notes": "All institution identifiers, campus location, and land area align with APH 2026-27 norms for Technical Urban/Rural minimum requirements (>2.5 - 5.0 Acres)."
+    },
+    {
+      "file_path": "test-data/standard-pack/02_previous_eoa_record.pdf",
+      "filename": "02_previous_eoa_record.pdf",
+      "category": "standard-pack",
+      "document_type": "Previous Extension of Approval (EoA) Record",
+      "file_size_bytes": 15707,
+      "sha256": "8f933933df8160e159c368d4078bb09bb4c46fbe0152431aa06a090b84803730",
+      "is_raster_scanned": false,
+      "synthetic_notice_verified": true,
+      "expected_extracted_fields": {
+        "certificate_number": "AICTE/WRO/2025-26/1-3329014521/EOA",
+        "issue_date": "28-04-2025",
+        "valid_until": "30-06-2026",
+        "institution_name": "Apex Institute of Technology & Advanced Studies",
+        "institution_identifier": "1-3329014521",
+        "issuing_authority": "Western Regional Office (WRO), AICTE",
+        "approved_programs": [
+          "Computer Science & Engineering (180 Seats)",
+          "Electronics & Telecommunication (120 Seats)",
+          "Mechanical & Mechatronics Engg (60 Seats)",
+          "M.Tech in Artificial Intelligence (24 Seats)",
+          "MBA (60 Seats)"
+        ]
+      },
+      "intended_validation_outcome": "PASS",
+      "expected_findings": [],
+      "verification_notes": "Previous academic session approval is active, authenticating eligibility for EoA 2026-2027 renewal."
+    },
+    {
+      "file_path": "test-data/standard-pack/03_affidavit_undertaking.pdf",
+      "filename": "03_affidavit_undertaking.pdf",
+      "category": "standard-pack",
+      "document_type": "Affidavit or Undertaking",
+      "file_size_bytes": 10154,
+      "sha256": "732968316329fc5f3e4ee43a41b1d1f77d612440b8fcaae95f002ba14a87a2d0",
+      "is_raster_scanned": false,
+      "synthetic_notice_verified": true,
+      "expected_extracted_fields": {
+        "affidavit_reference": "AFF-2026-APEX-NOTARY-091",
+        "estamp_certificate_no": "IN-MH99214482012",
+        "stamp_duty_amount": "500",
+        "deponent_name": "Dr. Arvind R. Kulkarni",
+        "institution_name": "Apex Institute of Technology & Advanced Studies",
+        "institution_identifier": "1-3329014521",
+        "notary_authority": "Adv. S. K. Deshmukh",
+        "attestation_date": "15-01-2026"
+      },
+      "intended_validation_outcome": "PASS",
+      "expected_findings": [],
+      "verification_notes": "Statutory sworn declaration meets APH Appendix legal undertaking format; deponent authorized by trust."
+    },
+    {
+      "file_path": "test-data/standard-pack/04_noc_fire_safety.pdf",
+      "filename": "04_noc_fire_safety.pdf",
+      "category": "standard-pack",
+      "document_type": "No Objection Certificate (Fire Safety NOC)",
+      "file_size_bytes": 12372,
+      "sha256": "65d324f41ee18f40788ee5f8eef58cfab9368d45e0d4a974b9d0e82c1630138d",
+      "is_raster_scanned": false,
+      "synthetic_notice_verified": true,
+      "expected_extracted_fields": {
+        "certificate_number": "CFO/PMR/2025/FIRE-44819",
+        "issuing_authority": "Chief Fire Officer, Fire & Emergency Services PMRDA",
+        "issue_date": "16-05-2024",
+        "valid_until": "15-05-2027",
+        "institution_name": "Apex Institute of Technology & Advanced Studies",
+        "survey_number": "142/2A and 142/2B",
+        "certified_area_sqm": "14,850"
+      },
+      "intended_validation_outcome": "PASS",
+      "expected_findings": [],
+      "verification_notes": "NOC is valid through 15-05-2027 (> Academic Year 2026-27), with verified fire safety systems and area matching building records."
+    },
+    {
+      "file_path": "test-data/standard-pack/05_accreditation_certificate.pdf",
+      "filename": "05_accreditation_certificate.pdf",
+      "category": "standard-pack",
+      "document_type": "Accreditation Certificate (NAAC)",
+      "file_size_bytes": 12816,
+      "sha256": "48e9c7a8997c11f759c99e97c9b2ccab58e388d750c0ba814120ec2927958564",
+      "is_raster_scanned": false,
+      "synthetic_notice_verified": true,
+      "expected_extracted_fields": {
+        "certificate_number": "NAAC/CERT/MH-AIT/2023/77102",
+        "accrediting_body": "National Assessment and Accreditation Council (NAAC)",
+        "institution_name": "Apex Institute of Technology & Advanced Studies",
+        "institution_identifier": "1-3329014521",
+        "cgpa": "3.42",
+        "grade": "A+",
+        "issue_date": "18-09-2023",
+        "valid_until": "17-09-2028"
+      },
+      "intended_validation_outcome": "PASS",
+      "expected_findings": [],
+      "verification_notes": "Valid Cycle 2 accreditation until September 2028. Provides eligibility for autonomous status and intake expansion bonus quotas."
+    },
+    {
+      "file_path": "test-data/standard-pack/06_faculty_qualification_records.pdf",
+      "filename": "06_faculty_qualification_records.pdf",
+      "category": "standard-pack",
+      "document_type": "Faculty Qualification Records",
+      "file_size_bytes": 15723,
+      "sha256": "fb41ddf7939d89953b064c185a97dd5f72cf5f57ca501712a2a0ffba50a8c2fb",
+      "is_raster_scanned": false,
+      "synthetic_notice_verified": true,
+      "expected_extracted_fields": {
+        "institution_name": "Apex Institute of Technology & Advanced Studies",
+        "institution_identifier": "1-3329014521",
+        "application_reference": "AICTE-2026-88412",
+        "principal_director_name": "Dr. Arvind R. Kulkarni",
+        "total_faculty_count": "68",
+        "phd_faculty_count": "28",
+        "cadre_ratio_declared": "1 : 2 : 6",
+        "roster_date": "14-01-2026"
+      },
+      "intended_validation_outcome": "PASS",
+      "expected_findings": [],
+      "verification_notes": "Full faculty cadre ratio conforms to 1:2:6 standard. Principal with doctorate degree is identified and attested."
+    },
+    {
+      "file_path": "test-data/standard-pack/07_payment_receipt.pdf",
+      "filename": "07_payment_receipt.pdf",
+      "category": "standard-pack",
+      "document_type": "Payment Receipt",
+      "file_size_bytes": 13680,
+      "sha256": "fe198ac8dbad3066c0dff8f13b5bf57b64082269a8b1be6c1e5ddae8c9a33bb7",
+      "is_raster_scanned": false,
+      "synthetic_notice_verified": true,
+      "expected_extracted_fields": {
+        "transaction_reference": "TXN-AICTE-2026-993812",
+        "challan_number": "CHL-2026-MH-449102",
+        "transaction_date": "10-01-2026 14:22:38 IST",
+        "bank_utr": "SBIN20260110998341",
+        "institution_name": "Apex Institute of Technology & Advanced Studies",
+        "institution_identifier": "1-3329014521",
+        "application_reference": "AICTE-2026-88412",
+        "amount_inr": "3,50,000",
+        "transaction_status": "SUCCESS / SETTLED"
+      },
+      "intended_validation_outcome": "PASS",
+      "expected_findings": [],
+      "verification_notes": "Electronic fee payment confirmed settled for EoA 2026-27 processing fee head."
+    },
+    {
+      "file_path": "test-data/variants/variant_expired_certificate.pdf",
+      "filename": "variant_expired_certificate.pdf",
+      "category": "variants",
+      "document_type": "No Objection Certificate (Fire Safety NOC) — Expired Variant",
+      "file_size_bytes": 12372,
+      "sha256": "379ab899f31ce54f391e92aa0c5ca6b7bc1a28a2a514d7a8d54c46fbe24ef78c",
+      "is_raster_scanned": false,
+      "synthetic_notice_verified": true,
+      "expected_extracted_fields": {
+        "certificate_number": "CFO/PMR/2025/FIRE-44819",
+        "issuing_authority": "Chief Fire Officer, Fire & Emergency Services PMRDA",
+        "issue_date": "16-05-2022",
+        "valid_until": "15-05-2023",
+        "institution_name": "Apex Institute of Technology & Advanced Studies"
+      },
+      "intended_validation_outcome": "FAIL",
+      "expected_findings": [
+        {
+          "finding_rule": "APH-RULE-DOC-EXPIRY",
+          "severity": "Critical",
+          "category": "Regulatory",
+          "title": "Mandatory Statutory Certificate Expired",
+          "description": "Document valid_until date (15-05-2023) has lapsed prior to current academic processing window (2026-2027)."
+        }
+      ],
+      "verification_notes": "Validation engine should flag non-compliance due to expired fire clearance; prompts requirement for renewal certificate upload."
+    },
+    {
+      "file_path": "test-data/variants/variant_missing_required_field.pdf",
+      "filename": "variant_missing_required_field.pdf",
+      "category": "variants",
+      "document_type": "Faculty Qualification Records — Incomplete Variant",
+      "file_size_bytes": 15171,
+      "sha256": "812b7a212be5f9fe73887c3a0728c0b5f135b5a2bfddce81ebca57285c57b1bc",
+      "is_raster_scanned": false,
+      "synthetic_notice_verified": true,
+      "expected_extracted_fields": {
+        "institution_name": "Apex Institute of Technology & Advanced Studies",
+        "institution_identifier": "1-3329014521",
+        "application_reference": "AICTE-2026-88412",
+        "principal_director_name": null,
+        "total_faculty_count": "68",
+        "phd_faculty_count": "28"
+      },
+      "intended_validation_outcome": "FLAG_FOR_REVIEW",
+      "expected_findings": [
+        {
+          "finding_rule": "APH-RULE-FAC-PRINCIPAL",
+          "severity": "High",
+          "category": "Faculty Ratio",
+          "title": "Missing Mandatory Field: Principal / Director Identification",
+          "description": "The mandatory field 'principal_director_name' could not be extracted from the faculty cadre dossier."
+        }
+      ],
+      "verification_notes": "Tests OCR and extraction parser resilience when required institutional keys are completely omitted."
+    },
+    {
+      "file_path": "test-data/variants/variant_cross_doc_mismatch.pdf",
+      "filename": "variant_cross_doc_mismatch.pdf",
+      "category": "variants",
+      "document_type": "Previous Extension of Approval (EoA) — Cross-Document Mismatch Variant",
+      "file_size_bytes": 9934,
+      "sha256": "895e04bbf4558e0a81d4554b73b22bbf52dd24cb2a92dbb31495c026ca2ef3b9",
+      "is_raster_scanned": false,
+      "synthetic_notice_verified": true,
+      "expected_extracted_fields": {
+        "certificate_number": "AICTE/WRO/2025-26/1-9999999999/EOA",
+        "institution_name": "Zenith Polytechnic & Technology Campus",
+        "institution_identifier": "1-9999999999",
+        "campus_location": "Nashik, Maharashtra"
+      },
+      "intended_validation_outcome": "FAIL",
+      "expected_findings": [
+        {
+          "finding_rule": "APH-RULE-CROSS-ID-MISMATCH",
+          "severity": "Critical",
+          "category": "Document Discrepancy",
+          "title": "Cross-Document Identifier Mismatch",
+          "description": "Extracted institution ID '1-9999999999' and name 'Zenith Polytechnic & Technology Campus' do not match application record '1-3329014521' (Apex Institute)."
+        }
+      ],
+      "verification_notes": "Tests multi-document cross-referencing audit: flags alien documents uploaded into another institution's dossier."
+    },
+    {
+      "file_path": "test-data/variants/variant_exact_duplicate.pdf",
+      "filename": "variant_exact_duplicate.pdf",
+      "category": "variants",
+      "document_type": "Payment Receipt — Exact Duplicate File Variant",
+      "file_size_bytes": 13680,
+      "sha256": "fe198ac8dbad3066c0dff8f13b5bf57b64082269a8b1be6c1e5ddae8c9a33bb7",
+      "is_raster_scanned": false,
+      "synthetic_notice_verified": true,
+      "expected_extracted_fields": {
+        "transaction_reference": "TXN-AICTE-2026-993812",
+        "duplicate_of_file": "07_payment_receipt.pdf",
+        "sha256_match": true
+      },
+      "intended_validation_outcome": "REJECT_OR_FLAG",
+      "expected_findings": [
+        {
+          "finding_rule": "APH-RULE-DUP-HASH",
+          "severity": "Medium",
+          "category": "Document Discrepancy",
+          "title": "Duplicate File Submission Detected",
+          "description": "Identical SHA-256 cryptographic hash (fe198ac8dbad...) matches an existing document already present in this application dossier."
+        }
+      ],
+      "verification_notes": "Tests hashing integrity engine: prevents duplicate uploads or redundant fees submitted across distinct checklist slots."
+    },
+    {
+      "file_path": "test-data/variants/variant_scanned_ocr_test.pdf",
+      "filename": "variant_scanned_ocr_test.pdf",
+      "category": "variants",
+      "document_type": "No Objection Certificate (Fire Safety NOC) — Scanned Image OCR Test",
+      "file_size_bytes": 189680,
+      "sha256": "b5ea889ecc303498cb0424b91866345ec42b6a953a3eb0e94bb5cbccbb81344f",
+      "is_raster_scanned": true,
+      "synthetic_notice_verified": true,
+      "expected_extracted_fields": {
+        "certificate_number": "CFO/PMR/2025/FIRE-44819",
+        "issuing_authority": "Chief Fire Officer, Fire & Emergency Services PMRDA",
+        "valid_until": "15-05-2027",
+        "institution_name": "Apex Institute of Technology & Advanced Studies",
+        "survey_number": "142/2A and 142/2B"
+      },
+      "intended_validation_outcome": "PASS_VIA_OCR",
+      "expected_findings": [
+        {
+          "finding_rule": "APH-INFO-SCANNED-DOC",
+          "severity": "Low",
+          "category": "Document Discrepancy",
+          "title": "Document Raster Scanned",
+          "description": "Vector digital text unavailable; processed via image rasterization and OCR pipeline."
+        }
+      ],
+      "verification_notes": "Contains 0 digital vector text characters; tests fallback to PyMuPDF pixmap rasterization and EasyOCR optical character extraction."
+    }
+  ]
+}
