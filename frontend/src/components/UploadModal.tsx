@@ -7,11 +7,23 @@ interface UploadModalProps {
   applicationId: string;
   defaultCategory?: string;
   replacesDocumentId?: string;
+  applicationCategory?: string;
+  availableCategories?: string[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
-const CATEGORIES = [
+export const EOA_CATEGORIES = [
+  "Affidavit 2",
+  "AICTE Portal Payment Receipt",
+  "Occupancy Certificate / Completion Certificate / Building Licence / Form D",
+  "Structural Stability Certificate",
+  "Fire Safety Certificate",
+  "Satellite Map of Land",
+  "Audited Accounts",
+];
+
+export const NON_EOA_CATEGORIES = [
   "Land Ownership and Title Certificate",
   "Land Use Certificate & Non-Encumbrance (NOC)",
   "Fire Safety NOC",
@@ -28,10 +40,28 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   applicationId,
   defaultCategory,
   replacesDocumentId,
+  applicationCategory,
+  availableCategories,
   onClose,
   onSuccess,
 }) => {
-  const [category, setCategory] = useState(defaultCategory || CATEGORIES[0]);
+  const isEoA =
+    (applicationCategory || "").toLowerCase().includes("extension of approval") ||
+    (applicationCategory || "").toLowerCase().includes("eoa");
+
+  const baseCategoryList =
+    availableCategories && availableCategories.length > 0
+      ? availableCategories
+      : isEoA
+      ? EOA_CATEGORIES
+      : NON_EOA_CATEGORIES;
+
+  const categoryList =
+    defaultCategory && !baseCategoryList.includes(defaultCategory)
+      ? [defaultCategory, ...baseCategoryList]
+      : baseCategoryList;
+
+  const [category, setCategory] = useState(defaultCategory || categoryList[0]);
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -144,7 +174,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               onChange={(e) => setCategory(e.target.value)}
               className="w-full text-xs bg-white border border-border rounded px-3 py-2 text-primary-text focus:outline-none focus:border-primary-orange"
             >
-              {CATEGORIES.map((c) => (
+              {categoryList.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>

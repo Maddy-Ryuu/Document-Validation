@@ -52,8 +52,10 @@ export interface DocumentExtraction {
 export interface ChecklistItem {
   category: string;
   description: string;
-  criticality: "Mandatory" | "Required" | "Optional" | string;
+  criticality: "Mandatory" | "Required" | "Optional" | "Conditional" | string;
   is_mandatory: boolean;
+  is_conditional?: boolean;
+  condition_description?: string | null;
   status: "Not uploaded" | "Uploaded" | "Queued" | "Processing" | "Processed" | "Needs Review" | "Failed" | string;
   uploaded_document?: DocumentItem | null;
 }

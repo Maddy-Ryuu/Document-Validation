@@ -162,8 +162,8 @@ class OCRExtractorService:
                     }
                     break
 
-        # 5. Land Specific: Survey No, Land Area, Unit
-        if "land" in document_type.lower() or "title" in document_type.lower():
+        # 5. Land Specific: Survey No, Land Area, Unit (Exclude Satellite Imagery)
+        if ("land" in document_type.lower() or "title" in document_type.lower()) and "satellite" not in document_type.lower():
             survey_patterns = [
                 r"(?:survey\s*(?:no\.?|number)|khasra\s*(?:no\.?|number)|gat\s*no\.?)\s*[:\-]?\s*([0-9\/\-_A-Za-z,\s]{2,30})",
             ]
@@ -200,7 +200,123 @@ class OCRExtractorService:
                         "corrected": False,
                     }
 
-        # 6. Building / Instructional Area
+        # 6. Satellite Map of Land (Geo Coordinates & Entrance)
+        if "satellite" in document_type.lower() or "map" in document_type.lower():
+            lat_patterns = [
+                r"(?:latitude|lat\.?)\s*[:\-]?\s*([0-9]{1,2}\.[0-9]{3,8}[°\s]*[NS]?)",
+                r"([0-9]{1,2}\.[0-9]{4,8}\s*°?\s*[NS])",
+            ]
+            lon_patterns = [
+                r"(?:longitude|long\.?|lon\.?)\s*[:\-]?\s*([0-9]{1,3}\.[0-9]{3,8}[°\s]*[EW]?)",
+                r"([0-9]{1,3}\.[0-9]{4,8}\s*°?\s*[EW])",
+            ]
+            for p in pages_metadata:
+                for pat in lat_patterns:
+                    res = search_span(pat, p["page"], p["text"])
+                    if res and "latitude" not in extracted:
+                        extracted["latitude"] = {
+                            "value": res[0],
+                            "page": p["page"],
+                            "confidence": 0.92,
+                            "source_snippet": res[1],
+                            "corrected": False,
+                        }
+                        break
+                for pat in lon_patterns:
+                    res = search_span(pat, p["page"], p["text"])
+                    if res and "longitude" not in extracted:
+                        extracted["longitude"] = {
+                            "value": res[0],
+                            "page": p["page"],
+                            "confidence": 0.92,
+                            "source_snippet": res[1],
+                            "corrected": False,
+                        }
+                        break
+
+        # 7. Affidavit 2 Specific: Stamp Duty, Sworn Authority, Signatory
+        if "affidavit" in document_type.lower():
+            stamp_pat = r"(?:stamp\s*(?:duty|amount|value)|e-?stamp)\s*[:\-]?\s*(?:rs\.?|inr|₹)?\s*([0-9.,]+)"
+            sworn_pat = r"(?:sworn\s+before|notary\s+public|judicial\s+magistrate|oath\s+commissioner|deposed\s+before)\s*[:\-]?\s*([A-Za-z\s.,]{3,50})"
+            desig_pat = r"(Chairman|Secretary|President|Authorized Signatory)"
+            for p in pages_metadata:
+                res_stamp = search_span(stamp_pat, p["page"], p["text"])
+                if res_stamp and "stamp_duty_amount" not in extracted:
+                    extracted["stamp_duty_amount"] = {
+                        "value": res_stamp[0],
+                        "page": p["page"],
+                        "confidence": 0.91,
+                        "source_snippet": res_stamp[1],
+                        "corrected": False,
+                    }
+                res_sworn = search_span(sworn_pat, p["page"], p["text"])
+                if res_sworn and "sworn_before" not in extracted:
+                    extracted["sworn_before"] = {
+                        "value": res_sworn[0],
+                        "page": p["page"],
+                        "confidence": 0.89,
+                        "source_snippet": res_sworn[1],
+                        "corrected": False,
+                    }
+                res_desig = search_span(desig_pat, p["page"], p["text"])
+                if res_desig and "signatory_designation" not in extracted:
+                    extracted["signatory_designation"] = {
+                        "value": res_desig[0],
+                        "page": p["page"],
+                        "confidence": 0.90,
+                        "source_snippet": res_desig[1],
+                        "corrected": False,
+                    }
+
+        # 8. Structural Stability: Engineer details & building age
+        if "structural" in document_type.lower() or "stability" in document_type.lower():
+            eng_pat = r"(?:structural\s*engineer|consulting\s*engineer|certified\s*by)\s*[:\-]?\s*([A-Za-z\s.,]{3,50})"
+            age_pat = r"(?:building\s*age|age\s*of\s*building|years?\s*old|constructed\s*in)\s*[:\-]?\s*([0-9]{1,3}(?:\s*years)?|\d{4})"
+            for p in pages_metadata:
+                res_eng = search_span(eng_pat, p["page"], p["text"])
+                if res_eng and "structural_engineer_name" not in extracted:
+                    extracted["structural_engineer_name"] = {
+                        "value": res_eng[0],
+                        "page": p["page"],
+                        "confidence": 0.90,
+                        "source_snippet": res_eng[1],
+                        "corrected": False,
+                    }
+                res_age = search_span(age_pat, p["page"], p["text"])
+                if res_age and "building_age_years" not in extracted:
+                    extracted["building_age_years"] = {
+                        "value": res_age[0],
+                        "page": p["page"],
+                        "confidence": 0.92,
+                        "source_snippet": res_age[1],
+                        "corrected": False,
+                    }
+
+        # 9. Audited Accounts: Financial Year & CA Membership
+        if "audit" in document_type.lower() or "account" in document_type.lower():
+            fy_pat = r"(?:financial\s*year|f\.?y\.?|year\s*ended)\s*[:\-]?\s*(\d{4}[\s\-–\/]\d{2,4}|\d{4})"
+            ca_pat = r"(?:membership\s*(?:no\.?|number)|ca\s*reg\.?|m\.?\s*no\.?)\s*[:\-]?\s*([0-9]{4,8})"
+            for p in pages_metadata:
+                res_fy = search_span(fy_pat, p["page"], p["text"])
+                if res_fy and "financial_year" not in extracted:
+                    extracted["financial_year"] = {
+                        "value": res_fy[0],
+                        "page": p["page"],
+                        "confidence": 0.93,
+                        "source_snippet": res_fy[1],
+                        "corrected": False,
+                    }
+                res_ca = search_span(ca_pat, p["page"], p["text"])
+                if res_ca and "ca_membership_number" not in extracted:
+                    extracted["ca_membership_number"] = {
+                        "value": res_ca[0],
+                        "page": p["page"],
+                        "confidence": 0.92,
+                        "source_snippet": res_ca[1],
+                        "corrected": False,
+                    }
+
+        # 10. Building / Instructional Area
         if "building" in document_type.lower() or "architect" in document_type.lower():
             built_up_pattern = r"(?:built[\s\-]up\s+area|carpet\s+area|total\s+instructional\s+area)\s*[:\-]?\s*([0-9.,]+)\s*(?:sq\.?\s*m(?:trs?|meters?)?|sq\.?\s*ft)?"
             for p in pages_metadata:

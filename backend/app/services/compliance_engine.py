@@ -19,7 +19,7 @@ from app.models.models import (
     Finding,
     AuditEvent,
 )
-from app.services.checklist import get_checklist_for_application
+from app.services.checklist import get_checklist_for_application, is_document_match, is_eoa_category
 from app.core.regulatory_rules import (
     RULE_REGISTRY,
     TYPE_OFFICIAL_REGULATORY,
@@ -142,9 +142,31 @@ class ComplianceEngine:
         missing_mandatory_categories = []
         for chk in checklist_items:
             if chk["is_mandatory"]:
-                matched = any(d.document_type.lower() == chk["category"].lower() for d in docs)
+                matched = any(is_document_match(d.document_type, chk["category"]) for d in docs)
                 if not matched:
                     missing_mandatory_categories.append(chk["category"])
+            elif chk.get("is_conditional") and chk["category"] == "Structural Stability Certificate":
+                # Evaluate conditional building-age condition (> 30 years)
+                building_age = None
+                for d in docs:
+                    ext = extractions_by_doc_id.get(d.id)
+                    if ext and ext.structured_fields:
+                        if is_document_match(d.document_type, "Occupancy Certificate / Completion Certificate / Building Licence / Form D"):
+                            issue_d = ext.structured_fields.get("issue_date", {}).get("value")
+                            if issue_d:
+                                match_yr = re.search(r"\b(19\d\d|20[0-2]\d)\b", str(issue_d))
+                                if match_yr:
+                                    building_age = 2026 - int(match_yr.group(1))
+                        age_val = ext.structured_fields.get("building_age_years", {}).get("value")
+                        if age_val:
+                            try:
+                                building_age = float(re.sub(r"[^\d.]", "", str(age_val)))
+                            except Exception:
+                                pass
+                if building_age is not None and building_age > 30:
+                    matched = any(is_document_match(d.document_type, chk["category"]) for d in docs)
+                    if not matched:
+                        missing_mandatory_categories.append(f"{chk['category']} (Building Age: {int(building_age)} yrs > 30 yrs)")
 
         if missing_mandatory_categories:
             finding = Finding(
@@ -187,7 +209,7 @@ class ComplianceEngine:
         rule_2 = next(r for r in RULE_REGISTRY if r["rule_code"] == "APH-RULE-DOC-EXPIRY")
         fire_doc = None
         for d in docs:
-            if "fire" in d.document_type.lower() or "noc" in d.document_type.lower():
+            if is_document_match(d.document_type, "Fire Safety Certificate") or "fire" in d.document_type.lower() or "noc" in d.document_type.lower():
                 fire_doc = d
                 break
 
@@ -412,13 +434,33 @@ class ComplianceEngine:
         # RULE 4: APH-RULE-LAND-NORM (Minimum Contiguous Land Area)
         # -------------------------------------------------------------
         rule_4 = next(r for r in RULE_REGISTRY if r["rule_code"] == "APH-RULE-LAND-NORM")
+        has_land_req = any(
+            is_document_match(chk["category"], "Land Ownership and Title Certificate")
+            for chk in checklist_items if chk["is_mandatory"]
+        )
         land_doc = None
         for d in docs:
-            if "land" in d.document_type.lower() or "title" in d.document_type.lower() or "profile" in d.original_filename.lower():
+            # specifically check for Land Title / Ownership deed, NOT satellite map of land
+            if "satellite" not in d.document_type.lower() and (
+                is_document_match(d.document_type, "Land Ownership and Title Certificate")
+                or "title" in d.document_type.lower()
+                or "ownership" in d.document_type.lower()
+                or "deed" in d.document_type.lower()
+                or "profile" in d.original_filename.lower()
+            ):
                 land_doc = d
                 break
 
-        if not land_doc:
+        if not land_doc and not has_land_req:
+            rule_evaluations.append({
+                "rule_code": rule_4["rule_code"],
+                "rule_name": rule_4["name"],
+                "result": "NOT_EVALUATED" if len(docs) == 0 else "NOT_APPLICABLE",
+                "severity": rule_4["severity"],
+                "explanation": f"Minimum Land Area Norm is not a mandatory verification requirement for {app_category}.",
+                "regulatory_source": rule_4["regulatory_source"],
+            })
+        elif not land_doc:
             rule_evaluations.append({
                 "rule_code": rule_4["rule_code"],
                 "rule_name": rule_4["name"],
@@ -526,13 +568,23 @@ class ComplianceEngine:
         # RULE 5: APH-RULE-FAC-PRINCIPAL (Principal/Director Appointment)
         # -------------------------------------------------------------
         rule_5 = next(r for r in RULE_REGISTRY if r["rule_code"] == "APH-RULE-FAC-PRINCIPAL")
+        has_fac_req = any("faculty" in chk["category"].lower() or "cadre" in chk["category"].lower() for chk in checklist_items)
         fac_doc = None
         for d in docs:
             if "faculty" in d.document_type.lower() or "cadre" in d.document_type.lower():
                 fac_doc = d
                 break
 
-        if not fac_doc:
+        if not fac_doc and not has_fac_req:
+            rule_evaluations.append({
+                "rule_code": rule_5["rule_code"],
+                "rule_name": rule_5["name"],
+                "result": "NOT_EVALUATED" if len(docs) == 0 else "NOT_APPLICABLE",
+                "severity": rule_5["severity"],
+                "explanation": f"Faculty Cadre Undertaking is not an applicable checklist requirement for {app_category}.",
+                "regulatory_source": rule_5["regulatory_source"],
+            })
+        elif not fac_doc:
             rule_evaluations.append({
                 "rule_code": rule_5["rule_code"],
                 "rule_name": rule_5["name"],

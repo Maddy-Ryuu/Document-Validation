@@ -215,6 +215,13 @@ export const DocumentReviewPage: React.FC<DocumentReviewPageProps> = ({
               className="px-2.5 py-1.5 text-xs bg-white border border-border rounded-md text-primary-text focus:outline-none focus:border-primary-orange"
             >
               <option value="All">All Document Types</option>
+              <option value="Affidavit 2">Affidavit 2</option>
+              <option value="AICTE Portal Payment Receipt">AICTE Payment Receipt</option>
+              <option value="Occupancy Certificate / Completion Certificate / Building Licence / Form D">Occupancy / Completion / Building Licence / Form D</option>
+              <option value="Structural Stability Certificate">Structural Stability Certificate</option>
+              <option value="Fire Safety Certificate">Fire Safety Certificate</option>
+              <option value="Satellite Map of Land">Satellite Map of Land</option>
+              <option value="Audited Accounts">Audited Accounts</option>
               <option value="Land Ownership and Title Certificate">Land Title Certificate</option>
               <option value="Land Use Certificate & Non-Encumbrance (NOC)">Land Use & Non-Encumbrance</option>
               <option value="Fire Safety NOC">Fire Safety NOC</option>
@@ -222,6 +229,7 @@ export const DocumentReviewPage: React.FC<DocumentReviewPageProps> = ({
               <option value="Architect Certificate of Completion & Barrier-Free Access">Architect Certificate</option>
               <option value="University Affiliation / State Govt Permission">University Affiliation</option>
               <option value="Faculty Cadre & Roster Undertaking">Faculty Cadre Undertaking</option>
+              <option value="Trust / Society Registration Deed">Trust / Society Registration Deed</option>
               <option value="Other Regulatory Supporting Documents">Other Regulatory</option>
             </select>
           </div>
