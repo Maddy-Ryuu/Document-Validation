@@ -513,6 +513,8 @@ def get_application_checklist(application_id: str, db: Session = Depends(get_db)
                 is_mandatory=item["is_mandatory"],
                 is_conditional=item.get("is_conditional", False),
                 condition_description=item.get("condition_description"),
+                regulatory_source=item.get("regulatory_source"),
+                is_source_unconfirmed=item.get("is_source_unconfirmed", False),
                 status=current_status,
                 uploaded_document=doc_resp,
             )

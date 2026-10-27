@@ -56,6 +56,8 @@ export interface ChecklistItem {
   is_mandatory: boolean;
   is_conditional?: boolean;
   condition_description?: string | null;
+  regulatory_source?: RegulatorySource | null;
+  is_source_unconfirmed?: boolean;
   status: "Not uploaded" | "Uploaded" | "Queued" | "Processing" | "Processed" | "Needs Review" | "Failed" | string;
   uploaded_document?: DocumentItem | null;
 }

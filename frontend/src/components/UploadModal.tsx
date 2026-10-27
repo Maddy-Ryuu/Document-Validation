@@ -23,17 +23,60 @@ export const EOA_CATEGORIES = [
   "Audited Accounts",
 ];
 
-export const NON_EOA_CATEGORIES = [
-  "Land Ownership and Title Certificate",
-  "Land Use Certificate & Non-Encumbrance (NOC)",
-  "Fire Safety NOC",
-  "Approved Building Plan & Sanction Order",
-  "Architect Certificate of Completion & Barrier-Free Access",
+export const INCREASE_INTAKE_CATEGORIES = [
+  "Affidavit 2",
+  "AICTE Portal Payment Receipt",
+  "Occupancy Certificate / Completion Certificate / Building Licence / Form D",
+  "Structural Stability Certificate",
+  "Fire Safety Certificate",
+  "Audited Accounts",
   "University Affiliation / State Govt Permission",
+  "Approved Building Plan & Sanction Order",
   "Faculty Cadre & Roster Undertaking",
-  "Trust / Society Registration Deed",
-  "Other Regulatory Supporting Documents",
+  "Architect Certificate of Completion & Barrier-Free Access",
+  "Accreditation Certificate (NBA / NAAC)",
 ];
+
+export const NEW_INSTITUTE_CATEGORIES = [
+  "Approved Building Plan",
+  "Affidavit 2",
+  "Applicant Organisation Resolution (Format 3)",
+  "Occupancy Certificate / Completion Certificate / Building Licence / Form D",
+  "Fire Safety Certificate",
+  "Bank Manager Certificate 3",
+  "Complete Online Application & Prescribed Hard Copy",
+  "Organisation Registration Documents",
+  "Board of Governors Composition",
+  "Land / Building Ownership Evidence",
+  "Conditional Documents for Section 8 / PPP / BOT Arrangements",
+];
+
+export const NRI_FN_CATEGORIES = [
+  "Affidavit 2",
+  "AICTE Portal Payment Receipt",
+  "Occupancy Certificate / Completion Certificate / Building Licence / Form D",
+  "Fire Safety Certificate",
+  "Audited Accounts",
+  "Trust / Society Resolution for NRI / FN Quota (Format 3)",
+  "University Affiliation / State Board Approval for Quota Seats",
+  "Accreditation / Eligibility Proof for Supernumerary FN Seats",
+];
+
+export const CHANGE_SITE_CATEGORIES = [
+  "Affidavit 2",
+  "AICTE Portal Payment Receipt",
+  "Audited Accounts",
+  "Existing Institution Approval & Clearance Record",
+  "Affiliating University / Board NOC (Format 2)",
+  "Applicant Organisation Resolution (Format 3)",
+  "Land Ownership and Title Certificate (Proposed Site)",
+  "Land Use Certificate & Non-Encumbrance Certificate (Proposed Site)",
+  "Approved Building Plan (Proposed Site)",
+  "Occupancy Certificate / Completion Certificate (Proposed Site)",
+  "Fire Safety Certificate (Proposed Site)",
+];
+
+export const NON_EOA_CATEGORIES = NEW_INSTITUTE_CATEGORIES;
 
 export const UploadModal: React.FC<UploadModalProps> = ({
   isOpen,
@@ -45,16 +88,29 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const isEoA =
-    (applicationCategory || "").toLowerCase().includes("extension of approval") ||
-    (applicationCategory || "").toLowerCase().includes("eoa");
+  const catLower = (applicationCategory || "").toLowerCase();
+  const isEoA = catLower.includes("extension of approval") || catLower.includes("eoa");
+  const isIntake = catLower.includes("increase in intake") || catLower.includes("intake");
+  const isNewInst = catLower.includes("new technical institute") || catLower.includes("new institute");
+  const isNriFn = catLower.includes("nri") || catLower.includes("foreign national");
+  const isChangeSite = catLower.includes("change of site") || catLower.includes("location");
+
+  const defaultCategoryList = isEoA
+    ? EOA_CATEGORIES
+    : isIntake
+    ? INCREASE_INTAKE_CATEGORIES
+    : isNewInst
+    ? NEW_INSTITUTE_CATEGORIES
+    : isNriFn
+    ? NRI_FN_CATEGORIES
+    : isChangeSite
+    ? CHANGE_SITE_CATEGORIES
+    : NON_EOA_CATEGORIES;
 
   const baseCategoryList =
     availableCategories && availableCategories.length > 0
       ? availableCategories
-      : isEoA
-      ? EOA_CATEGORIES
-      : NON_EOA_CATEGORIES;
+      : defaultCategoryList;
 
   const categoryList =
     defaultCategory && !baseCategoryList.includes(defaultCategory)

@@ -138,7 +138,7 @@ export const NewApplicationModal: React.FC<NewApplicationModalProps> = ({
             >
               <option value="Extension of Approval (EoA)">Extension of Approval (EoA)</option>
               <option value="Increase in Intake">Increase in Intake</option>
-              <option value="New Institute">New Technical Institute</option>
+              <option value="New Technical Institute">New Technical Institute</option>
               <option value="NRI / Foreign National Quota">NRI / Foreign National Quota</option>
               <option value="Change of Site / Location">Change of Site / Location</option>
             </select>

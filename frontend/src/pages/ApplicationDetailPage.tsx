@@ -816,6 +816,13 @@ export const ApplicationDetailPage: React.FC<ApplicationDetailPageProps> = ({
                     </div>
                   )}
 
+                  {item.regulatory_source && (
+                    <div className="text-[10px] text-blue-800 bg-blue-50/60 px-2 py-0.5 rounded border border-blue-200/60 inline-flex items-center gap-1">
+                      <BookOpen className="w-3 h-3 text-blue-600 shrink-0" />
+                      <span>{item.regulatory_source.section} — {(item.regulatory_source as any).clause || item.regulatory_source.page}</span>
+                    </div>
+                  )}
+
                   {item.uploaded_document && (
                     <div className="text-[10px] text-secondary-text font-mono flex items-center gap-2 pt-1">
                       <span>Attached: {item.uploaded_document.original_filename}</span>
@@ -982,6 +989,7 @@ export const ApplicationDetailPage: React.FC<ApplicationDetailPageProps> = ({
         defaultCategory={uploadCategory}
         replacesDocumentId={replaceDocId}
         applicationCategory={app.application_category}
+        availableCategories={checklist.map((c) => c.category)}
         onClose={() => setIsUploadOpen(false)}
         onSuccess={() => {
           loadData();

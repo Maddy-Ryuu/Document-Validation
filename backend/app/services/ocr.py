@@ -83,10 +83,8 @@ class OCRExtractorService:
 
         # 1. Institution Name (common)
         inst_patterns = [
-            r"institute\s*[:\-]?\s*([A-Za-z0-9\s&,.\'-]{5,60})",
-            r"college\s*[:\-]?\s*([A-Za-z0-9\s&,.\'-]{5,60})",
-            r"name\s+of\s+(?:the\s+)?(?:institution|college|applicant)\s*[:\-]?\s*([A-Za-z0-9\s&,.\'-]{5,60})",
-            r"(?:in\s+favour\s+of|favouring|granted\s+to)\s+([A-Za-z0-9\s&,.\'-]{5,50}\s+(?:Institute|College|Trust|Society))",
+            r"(?:name\s+of\s+(?:the\s+)?(?:institution|college|applicant)|institute|college)\s*[:\-]\s*([^\r\n]{3,60})",
+            r"(?:in\s+favour\s+of|favouring|granted\s+to)\s+([^\r\n]{5,50}\s+(?:Institute|College|Trust|Society))",
         ]
         for p in pages_metadata:
             for pat in inst_patterns:
@@ -327,6 +325,58 @@ class OCRExtractorService:
                         "page": p["page"],
                         "confidence": 0.90,
                         "source_snippet": res_bld[1],
+                        "corrected": False,
+                    }
+
+        # 11. Format 3 Resolution & Governance
+        if "resolution" in document_type.lower() or "format 3" in document_type.lower():
+            res_num_pat = r"(?:resolution\s*(?:no\.?|number)|item\s*no\.?)\s*[:\-]?\s*([A-Za-z0-9\/\-_]{2,30})"
+            for p in pages_metadata:
+                res_r = search_span(res_num_pat, p["page"], p["text"])
+                if res_r and "resolution_number" not in extracted:
+                    extracted["resolution_number"] = {
+                        "value": res_r[0],
+                        "page": p["page"],
+                        "confidence": 0.91,
+                        "source_snippet": res_r[1],
+                        "corrected": False,
+                    }
+
+        # 12. Bank Certificate 3
+        if "bank" in document_type.lower() or "certificate 3" in document_type.lower():
+            fdr_pat = r"(?:fdr\s*(?:no\.?|account|number)|deposit\s*receipt\s*no\.?)\s*[:\-]?\s*([A-Za-z0-9\/\-_]{4,30})"
+            amt_pat = r"(?:deposit\s*amount|fdr\s*amount|sum\s*of\s*(?:rs\.?|inr|₹)?)\s*[:\-]?\s*(?:rs\.?|inr|₹)?\s*([0-9.,]+)"
+            for p in pages_metadata:
+                res_fdr = search_span(fdr_pat, p["page"], p["text"])
+                if res_fdr and "fdr_account_number" not in extracted:
+                    extracted["fdr_account_number"] = {
+                        "value": res_fdr[0],
+                        "page": p["page"],
+                        "confidence": 0.92,
+                        "source_snippet": res_fdr[1],
+                        "corrected": False,
+                    }
+                res_amt = search_span(amt_pat, p["page"], p["text"])
+                if res_amt and "deposit_amount" not in extracted:
+                    extracted["deposit_amount"] = {
+                        "value": res_amt[0],
+                        "page": p["page"],
+                        "confidence": 0.90,
+                        "source_snippet": res_amt[1],
+                        "corrected": False,
+                    }
+
+        # 13. Proposed Site Details (Change of Site)
+        if "proposed" in document_type.lower() or "format 2" in document_type.lower():
+            prop_addr_pat = r"(?:proposed\s*(?:site|location|campus)\s*address|at\s*village|situated\s*at)\s*[:\-]?\s*([A-Za-z0-9\s,.'\-]{3,60})"
+            for p in pages_metadata:
+                res_addr = search_span(prop_addr_pat, p["page"], p["text"])
+                if res_addr and "proposed_site_address" not in extracted:
+                    extracted["proposed_site_address"] = {
+                        "value": res_addr[0],
+                        "page": p["page"],
+                        "confidence": 0.88,
+                        "source_snippet": res_addr[1],
                         "corrected": False,
                     }
 

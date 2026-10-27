@@ -19,7 +19,15 @@ from app.models.models import (
     Finding,
     AuditEvent,
 )
-from app.services.checklist import get_checklist_for_application, is_document_match, is_eoa_category
+from app.services.checklist import (
+    get_checklist_for_application,
+    is_document_match,
+    is_eoa_category,
+    is_increase_intake_category,
+    is_new_institute_category,
+    is_nri_fn_category,
+    is_change_site_category,
+)
 from app.core.regulatory_rules import (
     RULE_REGISTRY,
     TYPE_OFFICIAL_REGULATORY,
@@ -54,9 +62,7 @@ def normalize_string(text: Optional[str]) -> str:
     if not text:
         return ""
     cleaned = text.lower()
-    # Remove newlines, tabs, and punctuation
     cleaned = re.sub(r"[^\w\s]", " ", cleaned)
-    # Remove common organizational filler
     filler = ["institute", "technology", "studies", "campus", "college", "applicant", "body", "the", "of", "and", "&"]
     tokens = [t for t in cleaned.split() if t not in filler]
     return " ".join(tokens)
@@ -66,7 +72,6 @@ def parse_date(date_str: Optional[str]) -> Optional[datetime]:
     """Tolerantly parses diverse date strings into a datetime object."""
     if not date_str:
         return None
-    # Strip time if present
     date_clean = date_str.split()[0].strip()
     formats = [
         "%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d", "%d.%m.%Y",
@@ -85,7 +90,7 @@ class ComplianceEngine:
     def run_compliance_evaluation(db: Session, application_id: str) -> Dict[str, Any]:
         """
         Executes the compliance rule suite against the specified application dossier.
-        Records a ValidationRun, persists findings in PostgreSQL/SQLite, and returns an executive report.
+        Records a ValidationRun, persists findings in database, and returns an executive report.
         """
         app = db.query(Application).filter(Application.id == application_id).first()
         if not app:
@@ -113,7 +118,6 @@ class ComplianceEngine:
         extractions_by_doc_id: Dict[str, DocumentExtraction] = {}
 
         for d in docs:
-            # Map latest version by document type
             existing = doc_map_by_type.get(d.document_type)
             if not existing or d.version > existing.version:
                 doc_map_by_type[d.document_type] = d
@@ -145,7 +149,7 @@ class ComplianceEngine:
                 matched = any(is_document_match(d.document_type, chk["category"]) for d in docs)
                 if not matched:
                     missing_mandatory_categories.append(chk["category"])
-            elif chk.get("is_conditional") and chk["category"] == "Structural Stability Certificate":
+            elif chk.get("is_conditional") and "structural stability" in chk["category"].lower():
                 # Evaluate conditional building-age condition (> 30 years)
                 building_age = None
                 for d in docs:
@@ -253,7 +257,6 @@ class ComplianceEngine:
                 })
             else:
                 expiry_dt = parse_date(valid_until_str)
-                # Processing cycle cutoff: 2026-06-30
                 cycle_cutoff = datetime(2026, 6, 30)
                 if expiry_dt and expiry_dt < cycle_cutoff:
                     finding = Finding(
@@ -283,7 +286,6 @@ class ComplianceEngine:
                         "expected_value": f"> {cycle_cutoff.strftime('%d-%m-%Y')}",
                     })
                 elif doc_is_synthetic:
-                    # Synthetic test document notice or metadata summary: date is extracted but authenticity is unverified
                     finding = Finding(
                         application_id=app.id,
                         document_id=fire_doc.id,
@@ -314,7 +316,6 @@ class ComplianceEngine:
                         "expected_value": f"Authentic authority-issued certificate valid > {cycle_cutoff.strftime('%d-%m-%Y')}",
                     })
                 else:
-                    # Real document with valid future expiry date; note that external authority handshake is pending
                     rule_evaluations.append({
                         "rule_code": rule_2["rule_code"],
                         "rule_name": rule_2["name"],
@@ -334,7 +335,6 @@ class ComplianceEngine:
         rule_3 = next(r for r in RULE_REGISTRY if r["rule_code"] == "APH-RULE-CROSS-ID-MISMATCH")
         target_name_norm = normalize_string(institution.name if institution else "")
 
-        # Collect all documents that have comparable institution name or identifier fields
         comparable_docs = []
         for d in docs:
             ext = extractions_by_doc_id.get(d.id)
@@ -348,8 +348,8 @@ class ComplianceEngine:
                         "identifier": extracted_id,
                     })
 
-        # Check for immediate discrepancy against master record if any document contains an alien name
         mismatched_docs = []
+        review_fragment_docs = []
         compared_records = []
         for item in comparable_docs:
             d = item["doc"]
@@ -363,12 +363,17 @@ class ComplianceEngine:
 
             if extracted_name:
                 extracted_norm = normalize_string(extracted_name)
-                if target_name_norm and extracted_norm:
+                # Check for OCR fragment: fewer than 5 characters or 1 short token
+                if len(extracted_norm) < 8 or len(extracted_norm.split()) <= 1:
+                    review_fragment_docs.append({
+                        "doc": d,
+                        "extracted": extracted_name,
+                    })
+                elif target_name_norm and extracted_norm:
                     tokens_target = set(target_name_norm.split())
                     tokens_extracted = set(extracted_norm.split())
                     common = tokens_target.intersection(tokens_extracted)
-                    # Zero common distinct tokens flags mismatch against master institution
-                    if len(common) == 0 and len(tokens_extracted) >= 1:
+                    if len(common) == 0:
                         mismatched_docs.append({
                             "doc": d,
                             "extracted": extracted_name,
@@ -400,13 +405,25 @@ class ComplianceEngine:
                 "rule_name": rule_3["name"],
                 "result": "FAIL",
                 "severity": rule_3["severity"],
-                "explanation": f"Detected {len(mismatched_docs)} document(s) bearing an alien or conflicting institution name across compared documents.",
+                "explanation": f"Detected {len(mismatched_docs)} document(s) bearing a conflicting institution name across compared documents.",
                 "regulatory_source": rule_3["regulatory_source"],
                 "mismatches": [{"file": m["doc"].original_filename, "found": m["extracted"]} for m in mismatched_docs],
                 "compared_documents": compared_records,
             })
+        elif review_fragment_docs:
+            rule_evaluations.append({
+                "rule_code": rule_3["rule_code"],
+                "rule_name": rule_3["name"],
+                "result": "NEEDS_REVIEW",
+                "severity": "MEDIUM",
+                "explanation": (
+                    f"OCR extracted partial text/fragment for institution identity in {len(review_fragment_docs)} document(s). "
+                    f"Scrutiny review required rather than marking definitive mismatch."
+                ),
+                "regulatory_source": rule_3["regulatory_source"],
+                "compared_documents": compared_records,
+            })
         elif len(comparable_docs) < 2:
-            # If no mismatch found, but fewer than 2 documents exist, cannot PASS cross-document consistency
             rule_evaluations.append({
                 "rule_code": rule_3["rule_code"],
                 "rule_name": rule_3["name"],
@@ -434,30 +451,29 @@ class ComplianceEngine:
         # RULE 4: APH-RULE-LAND-NORM (Minimum Contiguous Land Area)
         # -------------------------------------------------------------
         rule_4 = next(r for r in RULE_REGISTRY if r["rule_code"] == "APH-RULE-LAND-NORM")
-        has_land_req = any(
-            is_document_match(chk["category"], "Land Ownership and Title Certificate")
-            for chk in checklist_items if chk["is_mandatory"]
-        )
+        
         land_doc = None
         for d in docs:
-            # specifically check for Land Title / Ownership deed, NOT satellite map of land
             if "satellite" not in d.document_type.lower() and (
-                is_document_match(d.document_type, "Land Ownership and Title Certificate")
+                is_document_match(d.document_type, "Land / Building Ownership Evidence")
+                or is_document_match(d.document_type, "Land Ownership and Title Certificate (Proposed Site)")
+                or is_document_match(d.document_type, "Land Ownership and Title Certificate")
                 or "title" in d.document_type.lower()
                 or "ownership" in d.document_type.lower()
                 or "deed" in d.document_type.lower()
-                or "profile" in d.original_filename.lower()
             ):
                 land_doc = d
                 break
 
-        if not land_doc and not has_land_req:
+        land_norm_applies = is_new_institute_category(app_category) or is_change_site_category(app_category)
+
+        if not land_doc and not land_norm_applies:
             rule_evaluations.append({
                 "rule_code": rule_4["rule_code"],
                 "rule_name": rule_4["name"],
                 "result": "NOT_EVALUATED" if len(docs) == 0 else "NOT_APPLICABLE",
                 "severity": rule_4["severity"],
-                "explanation": f"Minimum Land Area Norm is not a mandatory verification requirement for {app_category}.",
+                "explanation": f"Minimum Contiguous Land Area Norm is not a mandatory verification requirement for {app_category}.",
                 "regulatory_source": rule_4["regulatory_source"],
             })
         elif not land_doc:
@@ -466,7 +482,7 @@ class ComplianceEngine:
                 "rule_name": rule_4["name"],
                 "result": "NOT_EVALUATED" if len(docs) == 0 else "NEEDS_REVIEW",
                 "severity": rule_4["severity"],
-                "explanation": "Land Ownership Certificate not identified in dossier. Awaiting land deed upload.",
+                "explanation": "Land Ownership Certificate not identified in dossier. Awaiting registered land deed upload.",
                 "regulatory_source": rule_4["regulatory_source"],
             })
         else:
@@ -514,7 +530,6 @@ class ComplianceEngine:
                             "expected_value": f">= {req_threshold} Acres",
                         })
                     elif doc_is_synthetic:
-                        # Synthetic test document or typed metadata summary: declared area is present, but title/contiguity is unverified
                         finding = Finding(
                             application_id=app.id,
                             document_id=land_doc.id,
@@ -568,14 +583,9 @@ class ComplianceEngine:
         # RULE 5: APH-RULE-FAC-PRINCIPAL (Principal/Director Appointment)
         # -------------------------------------------------------------
         rule_5 = next(r for r in RULE_REGISTRY if r["rule_code"] == "APH-RULE-FAC-PRINCIPAL")
-        has_fac_req = any("faculty" in chk["category"].lower() or "cadre" in chk["category"].lower() for chk in checklist_items)
-        fac_doc = None
-        for d in docs:
-            if "faculty" in d.document_type.lower() or "cadre" in d.document_type.lower():
-                fac_doc = d
-                break
+        fac_norm_applies = is_increase_intake_category(app_category) or any("faculty" in chk["category"].lower() for chk in checklist_items)
 
-        if not fac_doc and not has_fac_req:
+        if not fac_norm_applies:
             rule_evaluations.append({
                 "rule_code": rule_5["rule_code"],
                 "rule_name": rule_5["name"],
@@ -584,52 +594,59 @@ class ComplianceEngine:
                 "explanation": f"Faculty Cadre Undertaking is not an applicable checklist requirement for {app_category}.",
                 "regulatory_source": rule_5["regulatory_source"],
             })
-        elif not fac_doc:
-            rule_evaluations.append({
-                "rule_code": rule_5["rule_code"],
-                "rule_name": rule_5["name"],
-                "result": "NOT_APPLICABLE" if "new" in app_category.lower() else "NEEDS_REVIEW",
-                "severity": rule_5["severity"],
-                "explanation": "Faculty roster dossier not attached to evaluate Director / Principal appointment.",
-                "regulatory_source": rule_5["regulatory_source"],
-            })
         else:
-            ext = extractions_by_doc_id.get(fac_doc.id)
-            fields = ext.structured_fields if (ext and ext.structured_fields) else {}
-            principal_val = fields.get("principal_director_name", {}).get("value")
+            fac_doc = None
+            for d in docs:
+                if "faculty" in d.document_type.lower() or "cadre" in d.document_type.lower():
+                    fac_doc = d
+                    break
 
-            if not principal_val:
-                finding = Finding(
-                    application_id=app.id,
-                    document_id=fac_doc.id,
-                    validation_run_id=run.id,
-                    rule_code=rule_5["rule_code"],
-                    category=rule_5["category"],
-                    severity=rule_5["severity"],
-                    title="Missing Mandatory Field: Regular Principal / Director",
-                    explanation="Faculty cadre declaration does not identify an attested regular Principal / Director.",
-                    evidence_reference=f"Document: {fac_doc.original_filename} (Missing Principal)",
-                    status="Open",
-                )
-                findings_to_create.append(finding)
+            if not fac_doc:
                 rule_evaluations.append({
                     "rule_code": rule_5["rule_code"],
                     "rule_name": rule_5["name"],
-                    "result": "FAIL",
+                    "result": "NEEDS_REVIEW",
                     "severity": rule_5["severity"],
-                    "explanation": finding.explanation,
+                    "explanation": "Faculty roster dossier not attached to evaluate Director / Principal appointment.",
                     "regulatory_source": rule_5["regulatory_source"],
                 })
             else:
-                rule_evaluations.append({
-                    "rule_code": rule_5["rule_code"],
-                    "rule_name": rule_5["name"],
-                    "result": "PASS",
-                    "severity": rule_5["severity"],
-                    "explanation": f"Regular Principal / Director verified: '{principal_val}'.",
-                    "regulatory_source": rule_5["regulatory_source"],
-                    "actual_value": principal_val,
-                })
+                ext = extractions_by_doc_id.get(fac_doc.id)
+                fields = ext.structured_fields if (ext and ext.structured_fields) else {}
+                principal_val = fields.get("principal_director_name", {}).get("value")
+
+                if not principal_val:
+                    finding = Finding(
+                        application_id=app.id,
+                        document_id=fac_doc.id,
+                        validation_run_id=run.id,
+                        rule_code=rule_5["rule_code"],
+                        category=rule_5["category"],
+                        severity=rule_5["severity"],
+                        title="Missing Mandatory Field: Regular Principal / Director",
+                        explanation="Faculty cadre declaration does not identify an attested regular Principal / Director.",
+                        evidence_reference=f"Document: {fac_doc.original_filename} (Missing Principal)",
+                        status="Open",
+                    )
+                    findings_to_create.append(finding)
+                    rule_evaluations.append({
+                        "rule_code": rule_5["rule_code"],
+                        "rule_name": rule_5["name"],
+                        "result": "FAIL",
+                        "severity": rule_5["severity"],
+                        "explanation": finding.explanation,
+                        "regulatory_source": rule_5["regulatory_source"],
+                    })
+                else:
+                    rule_evaluations.append({
+                        "rule_code": rule_5["rule_code"],
+                        "rule_name": rule_5["name"],
+                        "result": "PASS",
+                        "severity": rule_5["severity"],
+                        "explanation": f"Regular Principal / Director verified: '{principal_val}'.",
+                        "regulatory_source": rule_5["regulatory_source"],
+                        "actual_value": principal_val,
+                    })
 
         # -------------------------------------------------------------
         # RULE 6: APH-RULE-DUP-HASH (Duplicate File Collision)
@@ -638,7 +655,6 @@ class ComplianceEngine:
         docs_with_hashes = [d for d in docs if d.sha256_hash]
 
         if len(docs_with_hashes) == 0:
-            # No files or hashes available to execute collision detection
             rule_evaluations.append({
                 "rule_code": rule_6["rule_code"],
                 "rule_name": rule_6["name"],
@@ -705,6 +721,261 @@ class ComplianceEngine:
                     "explanation": f"Cryptographic integrity audit confirmed: all {len(docs_with_hashes)} uploaded files possess distinct, non-colliding SHA-256 hashes.",
                     "regulatory_source": rule_6["regulatory_source"],
                     "verified_files_count": len(docs_with_hashes),
+                })
+
+        # -------------------------------------------------------------
+        # RULE 8: APH-RULE-NEW-INST-TRUST (New Technical Institute: Trust Reg & Format 3)
+        # -------------------------------------------------------------
+        rule_8 = next(r for r in RULE_REGISTRY if r["rule_code"] == "APH-RULE-NEW-INST-TRUST")
+        if not is_new_institute_category(app_category):
+            rule_evaluations.append({
+                "rule_code": rule_8["rule_code"],
+                "rule_name": rule_8["name"],
+                "result": "NOT_EVALUATED" if len(docs) == 0 else "NOT_APPLICABLE",
+                "severity": rule_8["severity"],
+                "explanation": f"New Institute Applicant Registration & Format 3 check applies only to New Technical Institute applications.",
+                "regulatory_source": rule_8["regulatory_source"],
+            })
+        else:
+            format3_doc = next((d for d in docs if is_document_match(d.document_type, "Applicant Organisation Resolution (Format 3)")), None)
+            reg_doc = next((d for d in docs if is_document_match(d.document_type, "Organisation Registration Documents")), None)
+            if not format3_doc or not reg_doc:
+                missing_sub = []
+                if not format3_doc:
+                    missing_sub.append("Applicant Organisation Resolution (Format 3)")
+                if not reg_doc:
+                    missing_sub.append("Organisation Registration Documents")
+                rule_evaluations.append({
+                    "rule_code": rule_8["rule_code"],
+                    "rule_name": rule_8["name"],
+                    "result": "FAIL",
+                    "severity": rule_8["severity"],
+                    "explanation": f"New Technical Institute applicant documentation incomplete: missing {', '.join(missing_sub)}.",
+                    "regulatory_source": rule_8["regulatory_source"],
+                })
+            else:
+                rule_evaluations.append({
+                    "rule_code": rule_8["rule_code"],
+                    "rule_name": rule_8["name"],
+                    "result": "PASS",
+                    "severity": rule_8["severity"],
+                    "explanation": "Applicant Trust/Society registration deed and Format 3 establishment resolution verified.",
+                    "regulatory_source": rule_8["regulatory_source"],
+                })
+
+        # -------------------------------------------------------------
+        # RULE 9: APH-RULE-NEW-INST-BANK (New Technical Institute: Bank Certificate 3)
+        # -------------------------------------------------------------
+        rule_9 = next(r for r in RULE_REGISTRY if r["rule_code"] == "APH-RULE-NEW-INST-BANK")
+        if not is_new_institute_category(app_category):
+            rule_evaluations.append({
+                "rule_code": rule_9["rule_code"],
+                "rule_name": rule_9["name"],
+                "result": "NOT_EVALUATED" if len(docs) == 0 else "NOT_APPLICABLE",
+                "severity": rule_9["severity"],
+                "explanation": f"Bank Manager Certificate 3 check applies only to New Technical Institute applications.",
+                "regulatory_source": rule_9["regulatory_source"],
+            })
+        else:
+            bank_doc = next((d for d in docs if is_document_match(d.document_type, "Bank Manager Certificate 3")), None)
+            if not bank_doc:
+                rule_evaluations.append({
+                    "rule_code": rule_9["rule_code"],
+                    "rule_name": rule_9["name"],
+                    "result": "FAIL",
+                    "severity": rule_9["severity"],
+                    "explanation": "Bank Manager Certificate 3 confirming required financial deposits/FDR is missing.",
+                    "regulatory_source": rule_9["regulatory_source"],
+                })
+            else:
+                rule_evaluations.append({
+                    "rule_code": rule_9["rule_code"],
+                    "rule_name": rule_9["name"],
+                    "result": "PASS",
+                    "severity": rule_9["severity"],
+                    "explanation": "Bank Manager Certificate 3 regarding financial status and mandatory deposits verified.",
+                    "regulatory_source": rule_9["regulatory_source"],
+                })
+
+        # -------------------------------------------------------------
+        # RULE 10: APH-RULE-INTAKE-AFFILIATION (Increase in Intake: University Affiliation)
+        # -------------------------------------------------------------
+        rule_10 = next(r for r in RULE_REGISTRY if r["rule_code"] == "APH-RULE-INTAKE-AFFILIATION")
+        if not is_increase_intake_category(app_category):
+            rule_evaluations.append({
+                "rule_code": rule_10["rule_code"],
+                "rule_name": rule_10["name"],
+                "result": "NOT_EVALUATED" if len(docs) == 0 else "NOT_APPLICABLE",
+                "severity": rule_10["severity"],
+                "explanation": f"University Affiliation & State NOC for intake expansion check applies to Increase in Intake applications.",
+                "regulatory_source": rule_10["regulatory_source"],
+            })
+        else:
+            affil_doc = next((d for d in docs if is_document_match(d.document_type, "University Affiliation / State Govt Permission")), None)
+            if not affil_doc:
+                rule_evaluations.append({
+                    "rule_code": rule_10["rule_code"],
+                    "rule_name": rule_10["name"],
+                    "result": "FAIL",
+                    "severity": rule_10["severity"],
+                    "explanation": "NOC / Affiliation approval order from affiliating University / State Govt for intake increase is missing.",
+                    "regulatory_source": rule_10["regulatory_source"],
+                })
+            else:
+                rule_evaluations.append({
+                    "rule_code": rule_10["rule_code"],
+                    "rule_name": rule_10["name"],
+                    "result": "PASS",
+                    "severity": rule_10["severity"],
+                    "explanation": "University affiliation approval order and State permission for intake increase verified.",
+                    "regulatory_source": rule_10["regulatory_source"],
+                })
+
+        # -------------------------------------------------------------
+        # RULE 11: APH-RULE-NRI-FN-SUBTYPE (NRI / Foreign National Quota Subtype Resolution)
+        # -------------------------------------------------------------
+        rule_11 = next(r for r in RULE_REGISTRY if r["rule_code"] == "APH-RULE-NRI-FN-SUBTYPE")
+        if not is_nri_fn_category(app_category):
+            rule_evaluations.append({
+                "rule_code": rule_11["rule_code"],
+                "rule_name": rule_11["name"],
+                "result": "NOT_EVALUATED" if len(docs) == 0 else "NOT_APPLICABLE",
+                "severity": rule_11["severity"],
+                "explanation": f"NRI / Foreign National Quota rules apply only to Quota applications.",
+                "regulatory_source": rule_11["regulatory_source"],
+            })
+        else:
+            res_doc = next((d for d in docs if is_document_match(d.document_type, "Trust / Society Resolution for NRI / FN Quota (Format 3)")), None)
+            # Check if quota subtype is specified
+            is_fn_supernumerary = any(
+                "foreign national" in (d.original_filename or "").lower() or "supernumerary" in (d.original_filename or "").lower()
+                for d in docs
+            )
+            is_nri_specific = any(
+                "nri quota" in (d.original_filename or "").lower() or "nri" in (d.original_filename or "").lower()
+                for d in docs
+            )
+
+            if not res_doc:
+                rule_evaluations.append({
+                    "rule_code": rule_11["rule_code"],
+                    "rule_name": rule_11["name"],
+                    "result": "FAIL",
+                    "severity": rule_11["severity"],
+                    "explanation": "Trust / Society resolution in Format 3 for introduction of NRI / Foreign National seats is missing.",
+                    "regulatory_source": rule_11["regulatory_source"],
+                })
+            elif not is_fn_supernumerary and not is_nri_specific:
+                # Subtype is unknown / unresolved
+                rule_evaluations.append({
+                    "rule_code": rule_11["rule_code"],
+                    "rule_name": rule_11["name"],
+                    "result": "NEEDS_REVIEW",
+                    "severity": rule_11["severity"],
+                    "explanation": (
+                        "Application filed under combined 'NRI / Foreign National Quota'. Exact quota subtype (NRI up to 5% within approved intake "
+                        "vs Foreign National / OCI supernumerary up to 15%) must be confirmed to determine applicability of supernumerary accreditation mandates."
+                    ),
+                    "regulatory_source": rule_11["regulatory_source"],
+                })
+            elif is_fn_supernumerary:
+                # Foreign national supernumerary requires accreditation proof
+                accred_doc = next((d for d in docs if is_document_match(d.document_type, "Accreditation / Eligibility Proof for Supernumerary FN Seats")), None)
+                if not accred_doc:
+                    rule_evaluations.append({
+                        "rule_code": rule_11["rule_code"],
+                        "rule_name": rule_11["name"],
+                        "result": "NEEDS_REVIEW",
+                        "severity": rule_11["severity"],
+                        "explanation": "Foreign National Supernumerary quota requires valid NBA Accreditation or Autonomy eligibility proof.",
+                        "regulatory_source": rule_11["regulatory_source"],
+                    })
+                else:
+                    rule_evaluations.append({
+                        "rule_code": rule_11["rule_code"],
+                        "rule_name": rule_11["name"],
+                        "result": "PASS",
+                        "severity": rule_11["severity"],
+                        "explanation": "Foreign National supernumerary quota resolution and accreditation eligibility verified.",
+                        "regulatory_source": rule_11["regulatory_source"],
+                    })
+            else:
+                rule_evaluations.append({
+                    "rule_code": rule_11["rule_code"],
+                    "rule_name": rule_11["name"],
+                    "result": "PASS",
+                    "severity": rule_11["severity"],
+                    "explanation": "NRI quota Format 3 resolution verified for intake allocation.",
+                    "regulatory_source": rule_11["regulatory_source"],
+                })
+
+        # -------------------------------------------------------------
+        # RULE 12: APH-RULE-SITE-LOCATION-DISTINCTION (Change of Site: Location Distinction)
+        # -------------------------------------------------------------
+        rule_12 = next(r for r in RULE_REGISTRY if r["rule_code"] == "APH-RULE-SITE-LOCATION-DISTINCTION")
+        if not is_change_site_category(app_category):
+            rule_evaluations.append({
+                "rule_code": rule_12["rule_code"],
+                "rule_name": rule_12["name"],
+                "result": "NOT_EVALUATED" if len(docs) == 0 else "NOT_APPLICABLE",
+                "severity": rule_12["severity"],
+                "explanation": f"Site location distinction check applies only to Change of Site / Location applications.",
+                "regulatory_source": rule_12["regulatory_source"],
+            })
+        else:
+            # Check whether site-change specific documents are present and distinguish proposed from old site
+            prop_land = next((d for d in docs if is_document_match(d.document_type, "Land Ownership and Title Certificate (Proposed Site)")), None)
+            prop_bld = next((d for d in docs if is_document_match(d.document_type, "Approved Building Plan (Proposed Site)")), None)
+            prop_fire = next((d for d in docs if is_document_match(d.document_type, "Fire Safety Certificate (Proposed Site)")), None)
+            format2_doc = next((d for d in docs if is_document_match(d.document_type, "Affiliating University / Board NOC (Format 2)")), None)
+
+            # Check for old-site reuse: if proposed-site documents specifically mention "old site" or "existing site only"
+            old_site_reused = False
+            for d in [prop_land, prop_bld, prop_fire]:
+                if d:
+                    ext = extractions_by_doc_id.get(d.id)
+                    raw = ext.raw_text if ext else ""
+                    if "old campus only" in raw.lower() or "current location certificate reused" in raw.lower():
+                        old_site_reused = True
+
+            if old_site_reused:
+                finding = Finding(
+                    application_id=app.id,
+                    validation_run_id=run.id,
+                    rule_code=rule_12["rule_code"],
+                    category=rule_12["category"],
+                    severity=rule_12["severity"],
+                    title="Change of Site: Improper Old-Site Certificate Reuse",
+                    explanation="Submitted documentation for proposed site appears to be an old-site certificate. Proof of clearance must strictly pertain to the proposed new location.",
+                    evidence_reference="Proposed site document reuse detected",
+                    status="Open",
+                )
+                findings_to_create.append(finding)
+                rule_evaluations.append({
+                    "rule_code": rule_12["rule_code"],
+                    "rule_name": rule_12["name"],
+                    "result": "FAIL",
+                    "severity": rule_12["severity"],
+                    "explanation": finding.explanation,
+                    "regulatory_source": rule_12["regulatory_source"],
+                })
+            elif not format2_doc or not prop_land or not prop_bld:
+                rule_evaluations.append({
+                    "rule_code": rule_12["rule_code"],
+                    "rule_name": rule_12["name"],
+                    "result": "FAIL",
+                    "severity": rule_12["severity"],
+                    "explanation": "Change of Site dossier incomplete: University Format 2 NOC, proposed site land title, and proposed building plan must all be furnished.",
+                    "regulatory_source": rule_12["regulatory_source"],
+                })
+            else:
+                rule_evaluations.append({
+                    "rule_code": rule_12["rule_code"],
+                    "rule_name": rule_12["name"],
+                    "result": "PASS",
+                    "severity": rule_12["severity"],
+                    "explanation": "Proposed location documentation (Land deed, Format 2 NOC, and Building plan) verified distinct from previous campus.",
+                    "regulatory_source": rule_12["regulatory_source"],
                 })
 
         # -------------------------------------------------------------

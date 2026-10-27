@@ -149,6 +149,8 @@ class ChecklistItem(BaseModel):
     is_mandatory: bool
     is_conditional: bool = False
     condition_description: Optional[str] = None
+    regulatory_source: Optional[Dict[str, Any]] = None
+    is_source_unconfirmed: bool = False
     status: str  # Not uploaded, Uploaded, Queued, Processing, Processed, Needs Review, Failed
     uploaded_document: Optional[DocumentResponse] = None
 

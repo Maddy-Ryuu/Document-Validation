@@ -168,18 +168,18 @@ def test_non_eoa_categories_preserved():
         assert len(chk) != 7 or "Affidavit 2" not in cat_names
 
         # Category-specific verifications
-        if cat == "New Institute":
-            assert any(item["category"] == "Land Ownership and Title Certificate" and item["is_mandatory"] for item in chk)
-            assert any(item["category"] == "Land Use Certificate & Non-Encumbrance (NOC)" and item["is_mandatory"] for item in chk)
-            assert any(item["category"] == "Trust / Society Registration Deed" and item["is_mandatory"] for item in chk)
+        if cat in ["New Institute", "New Technical Institute"]:
+            assert any("Land" in item["category"] and item["is_mandatory"] for item in chk)
+            assert any(item["category"] == "Bank Manager Certificate 3" and item["is_mandatory"] for item in chk)
+            assert any("Organisation" in item["category"] or "Trust" in item["category"] for item in chk)
 
         elif cat == "Increase in Intake":
             assert any(item["category"] == "Approved Building Plan & Sanction Order" and item["is_mandatory"] for item in chk)
             assert any(item["category"] == "Faculty Cadre & Roster Undertaking" and item["is_mandatory"] for item in chk)
 
         elif cat == "Change of Site / Location":
-            assert any(item["category"] == "Land Ownership and Title Certificate" and item["is_mandatory"] for item in chk)
-            assert any(item["category"] == "Land Use Certificate & Non-Encumbrance (NOC)" and item["is_mandatory"] for item in chk)
+            assert any("Proposed Site" in item["category"] and item["is_mandatory"] for item in chk)
+            assert any("Format 2" in item["category"] and item["is_mandatory"] for item in chk)
 
 
 # =============================================================================
