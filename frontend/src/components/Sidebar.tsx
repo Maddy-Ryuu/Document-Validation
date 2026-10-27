@@ -103,9 +103,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => 
                 <span>{item.label}</span>
               </div>
 
-              {!item.isPhase1 && (
+              {item.badge && (
                 <span className="text-[9px] px-1.5 py-0.5 rounded bg-surface-muted text-secondary-text border border-border/50 uppercase font-mono">
-                  Phase 2
+                  {item.badge}
                 </span>
               )}
             </button>

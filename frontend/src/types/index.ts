@@ -243,3 +243,89 @@ export interface CreateInstitutionPayload {
   state: string;
   city: string;
 }
+
+export interface DocumentReviewItem extends DocumentItem {
+  application_identifier?: string;
+  institution_id?: string;
+  institution_name?: string;
+  confidence_score?: number | null;
+  extraction_status?: string | null;
+  structured_fields?: Record<string, DocumentFieldExtraction> | null;
+  findings_count?: number;
+}
+
+export interface QueueItem {
+  id: string;
+  application_identifier: string;
+  institution_id: string;
+  institution_name?: string;
+  institution_city?: string;
+  institution_state?: string;
+  application_category: string;
+  academic_year: string;
+  status: string;
+  submission_date: string;
+  created_at: string;
+  assigned_reviewer_id?: string | null;
+  assigned_reviewer_name?: string | null;
+  risk_band?: string;
+  risk_score?: number | null;
+  priority: "High" | "Medium" | "Low";
+  documents_count: number;
+  findings_count: number;
+}
+
+export interface AuditEventItem {
+  id: string;
+  user_id?: string | null;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  details: Record<string, any>;
+  created_at: string;
+}
+
+export interface AnalyticsReport {
+  total_applications: number;
+  total_institutions: number;
+  total_documents: number;
+  total_findings: number;
+  status_breakdown: Record<string, number>;
+  category_breakdown: Record<string, number>;
+  institution_type_breakdown: Record<string, number>;
+  risk_breakdown: Record<string, number>;
+  findings_by_severity: Record<string, number>;
+  document_status_breakdown: Record<string, number>;
+  state_distribution: Record<string, number>;
+  recent_activity: AuditEventItem[];
+}
+
+export interface SystemSettings {
+  system: {
+    project_name: string;
+    environment: string;
+    version: string;
+    handbook_edition: string;
+    storage_type: string;
+    database_engine: string;
+    database_connected: boolean;
+    total_persisted_applications: number;
+    total_persisted_institutions: number;
+  };
+  officer_profile: {
+    name: string;
+    designation: string;
+    bureau: string;
+    email: string;
+    assigned_region: string;
+    role: string;
+    permissions: string[];
+  };
+  security_status: {
+    document_authorization: string;
+    integrity_checks: string;
+    audit_immutability: string;
+    sso_two_factor: string;
+    biometric_auth: string;
+  };
+}

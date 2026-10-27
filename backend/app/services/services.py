@@ -13,6 +13,9 @@ from app.models.models import (
     Finding,
     RiskAssessment,
     AuditEvent,
+    DocumentExtraction,
+    ReviewAction,
+    User,
     normalize_institution_field,
 )
 from app.schemas.schemas import (
@@ -516,3 +519,402 @@ class DashboardService:
             trend_points.append(TrendPoint(date=date_str, applications=app_count, verified=verified_count))
 
         return DashboardTrendsResponse(trends=trend_points)
+
+
+class DocumentService:
+    @staticmethod
+    def get_documents(
+        db: Session,
+        page: int = 1,
+        limit: int = 20,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        document_type: Optional[str] = None,
+        application_id: Optional[str] = None,
+    ) -> Tuple[List[dict], int]:
+        query = (
+            db.query(Document)
+            .join(Application, Document.application_id == Application.id)
+            .join(Institution, Application.institution_id == Institution.id)
+        )
+
+        if application_id:
+            query = query.filter(Document.application_id == application_id)
+        if status and status != "All":
+            query = query.filter(Document.processing_status == status)
+        if document_type and document_type != "All":
+            query = query.filter(Document.document_type == document_type)
+        if search:
+            term = f"%{search}%"
+            query = query.filter(
+                or_(
+                    Document.original_filename.ilike(term),
+                    Document.document_type.ilike(term),
+                    Application.application_identifier.ilike(term),
+                    Institution.name.ilike(term),
+                )
+            )
+
+        total = query.count()
+        offset = (page - 1) * limit
+        docs = query.order_by(desc(Document.created_at)).offset(offset).limit(limit).all()
+
+        items = []
+        for d in docs:
+            ext = d.extractions[0] if d.extractions else None
+            items.append({
+                "id": d.id,
+                "application_id": d.application_id,
+                "application_identifier": d.application.application_identifier if d.application else None,
+                "institution_id": d.application.institution_id if d.application else None,
+                "institution_name": d.application.institution.name if d.application and d.application.institution else None,
+                "document_type": d.document_type,
+                "original_filename": d.original_filename,
+                "file_size_bytes": d.file_size_bytes,
+                "detected_mime_type": d.detected_mime_type,
+                "sha256_hash": d.sha256_hash,
+                "version": d.version,
+                "processing_status": d.processing_status,
+                "processing_error": d.processing_error,
+                "confidence_score": ext.confidence_score if ext else None,
+                "extraction_status": ext.extraction_status if ext else None,
+                "structured_fields": ext.structured_fields if ext else None,
+                "findings_count": len(d.findings) if d.findings else 0,
+                "created_at": d.created_at,
+                "updated_at": d.updated_at,
+            })
+        return items, total
+
+    @staticmethod
+    def review_document(
+        db: Session,
+        document_id: str,
+        action: str,  # "Approved", "Rejected", "Needs Review"
+        comments: Optional[str] = None,
+    ) -> Optional[dict]:
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        if not doc:
+            return None
+
+        status_map = {
+            "Approved": "Processed",
+            "Rejected": "Failed",
+            "Needs Review": "Needs Review",
+        }
+        new_status = status_map.get(action, "Needs Review")
+        old_status = doc.processing_status
+        doc.processing_status = new_status
+        doc.updated_at = datetime.utcnow()
+
+        audit = AuditEvent(
+            entity_type="Document",
+            entity_id=doc.id,
+            action=f"REVIEW_{action.upper().replace(' ', '_')}",
+            details={
+                "action": action,
+                "previous_status": old_status,
+                "new_status": new_status,
+                "comments": comments or "",
+                "filename": doc.original_filename,
+                "document_type": doc.document_type,
+                "application_id": doc.application_id,
+            },
+        )
+        db.add(audit)
+        db.commit()
+        db.refresh(doc)
+
+        return {
+            "id": doc.id,
+            "application_id": doc.application_id,
+            "document_type": doc.document_type,
+            "original_filename": doc.original_filename,
+            "processing_status": doc.processing_status,
+            "updated_at": doc.updated_at,
+        }
+
+
+class QueueService:
+    @staticmethod
+    def get_review_queue(
+        db: Session,
+        page: int = 1,
+        limit: int = 20,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        priority: Optional[str] = None,
+        category: Optional[str] = None,
+    ) -> Tuple[List[dict], int]:
+        query = db.query(Application).join(Institution, Application.institution_id == Institution.id)
+
+        if status and status != "All":
+            query = query.filter(Application.status == status)
+        else:
+            query = query.filter(Application.status.in_(["Action Required", "Under Validation", "Needs Review"]))
+
+        if category and category != "All":
+            query = query.filter(Application.application_category == category)
+
+        if search:
+            term = f"%{search}%"
+            query = query.filter(
+                or_(
+                    Application.application_identifier.ilike(term),
+                    Institution.name.ilike(term),
+                    Institution.city.ilike(term),
+                    Institution.state.ilike(term),
+                )
+            )
+
+        total = query.count()
+        offset = (page - 1) * limit
+        apps = query.order_by(desc(Application.submission_date)).offset(offset).limit(limit).all()
+
+        items = []
+        for app in apps:
+            latest_risk = (
+                db.query(RiskAssessment)
+                .filter(RiskAssessment.application_id == app.id)
+                .order_by(desc(RiskAssessment.calculated_at))
+                .first()
+            )
+            risk_band = latest_risk.risk_band if latest_risk else "Unevaluated"
+            risk_score = latest_risk.score if latest_risk else None
+
+            computed_priority = "Medium"
+            if risk_band in ("High", "Extreme") or app.status == "Action Required":
+                computed_priority = "High"
+            elif risk_band == "Low" and app.status == "Under Validation":
+                computed_priority = "Low"
+
+            if priority and priority != "All" and computed_priority != priority:
+                continue
+
+            items.append({
+                "id": app.id,
+                "application_identifier": app.application_identifier,
+                "institution_id": app.institution_id,
+                "institution_name": app.institution.name if app.institution else None,
+                "institution_city": app.institution.city if app.institution else None,
+                "institution_state": app.institution.state if app.institution else None,
+                "application_category": app.application_category,
+                "academic_year": app.academic_year,
+                "status": app.status,
+                "submission_date": app.submission_date,
+                "created_at": app.created_at,
+                "assigned_reviewer_id": app.assigned_reviewer_id,
+                "assigned_reviewer_name": app.assigned_reviewer.name if app.assigned_reviewer else None,
+                "risk_band": risk_band,
+                "risk_score": risk_score,
+                "priority": computed_priority,
+                "documents_count": len(app.documents) if app.documents else 0,
+                "findings_count": len(app.findings) if app.findings else 0,
+            })
+
+        return items, total
+
+
+class AuditService:
+    @staticmethod
+    def get_audit_events(
+        db: Session,
+        page: int = 1,
+        limit: int = 25,
+        entity_type: Optional[str] = None,
+        action: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> Tuple[List[dict], int]:
+        query = db.query(AuditEvent)
+
+        if entity_type and entity_type != "All":
+            query = query.filter(AuditEvent.entity_type == entity_type)
+        if action and action != "All":
+            query = query.filter(AuditEvent.action.ilike(f"%{action}%"))
+        if search:
+            term = f"%{search}%"
+            query = query.filter(
+                or_(
+                    AuditEvent.entity_id.ilike(term),
+                    AuditEvent.action.ilike(term),
+                    AuditEvent.entity_type.ilike(term),
+                )
+            )
+
+        total = query.count()
+        offset = (page - 1) * limit
+        events = query.order_by(desc(AuditEvent.created_at)).offset(offset).limit(limit).all()
+
+        items = []
+        for e in events:
+            items.append({
+                "id": e.id,
+                "user_id": e.user_id,
+                "entity_type": e.entity_type,
+                "entity_id": e.entity_id,
+                "action": e.action,
+                "details": e.details or {},
+                "created_at": e.created_at,
+            })
+        return items, total
+
+
+class AnalyticsService:
+    @staticmethod
+    def get_analytics(db: Session) -> dict:
+        total_apps = db.query(func.count(Application.id)).scalar() or 0
+        total_insts = db.query(func.count(Institution.id)).scalar() or 0
+        total_docs = db.query(func.count(Document.id)).scalar() or 0
+        total_findings = db.query(func.count(Finding.id)).scalar() or 0
+
+        status_counts = (
+            db.query(Application.status, func.count(Application.id))
+            .group_by(Application.status)
+            .all()
+        )
+        status_breakdown = {s: count for s, count in status_counts}
+
+        cat_counts = (
+            db.query(Application.application_category, func.count(Application.id))
+            .group_by(Application.application_category)
+            .all()
+        )
+        category_breakdown = {c: count for c, count in cat_counts}
+
+        inst_counts = (
+            db.query(Institution.institution_type, func.count(Institution.id))
+            .group_by(Institution.institution_type)
+            .all()
+        )
+        institution_type_breakdown = {t: count for t, count in inst_counts}
+
+        latest_risk_subq = (
+            db.query(
+                RiskAssessment.application_id,
+                func.max(RiskAssessment.calculated_at).label("max_calc"),
+            )
+            .group_by(RiskAssessment.application_id)
+            .subquery()
+        )
+        latest_risks = (
+            db.query(RiskAssessment.risk_band, func.count(RiskAssessment.id))
+            .join(
+                latest_risk_subq,
+                (RiskAssessment.application_id == latest_risk_subq.c.application_id)
+                & (RiskAssessment.calculated_at == latest_risk_subq.c.max_calc),
+            )
+            .group_by(RiskAssessment.risk_band)
+            .all()
+        )
+        risk_breakdown = {"Low": 0, "Medium": 0, "High": 0, "Extreme": 0}
+        for band, count in latest_risks:
+            if band:
+                risk_breakdown[band] = count
+
+        finding_counts = (
+            db.query(Finding.severity, func.count(Finding.id))
+            .group_by(Finding.severity)
+            .all()
+        )
+        findings_by_severity = {sev: count for sev, count in finding_counts}
+
+        doc_counts = (
+            db.query(Document.processing_status, func.count(Document.id))
+            .group_by(Document.processing_status)
+            .all()
+        )
+        document_status_breakdown = {st: count for st, count in doc_counts}
+
+        state_counts = (
+            db.query(Institution.state, func.count(Application.id))
+            .join(Application, Application.institution_id == Institution.id)
+            .group_by(Institution.state)
+            .order_by(desc(func.count(Application.id)))
+            .limit(8)
+            .all()
+        )
+        state_distribution = {state: count for state, count in state_counts}
+
+        recent_events = (
+            db.query(AuditEvent)
+            .order_by(desc(AuditEvent.created_at))
+            .limit(8)
+            .all()
+        )
+        recent_activity = [
+            {
+                "id": ev.id,
+                "entity_type": ev.entity_type,
+                "entity_id": ev.entity_id,
+                "action": ev.action,
+                "details": ev.details or {},
+                "created_at": ev.created_at,
+            }
+            for ev in recent_events
+        ]
+
+        return {
+            "total_applications": total_apps,
+            "total_institutions": total_insts,
+            "total_documents": total_docs,
+            "total_findings": total_findings,
+            "status_breakdown": status_breakdown,
+            "category_breakdown": category_breakdown,
+            "institution_type_breakdown": institution_type_breakdown,
+            "risk_breakdown": risk_breakdown,
+            "findings_by_severity": findings_by_severity,
+            "document_status_breakdown": document_status_breakdown,
+            "state_distribution": state_distribution,
+            "recent_activity": recent_activity,
+        }
+
+
+class SystemService:
+    @staticmethod
+    def get_system_info(db: Session) -> dict:
+        from app.core.config import settings
+        db_connected = True
+        try:
+            db.execute(__import__("sqlalchemy").text("SELECT 1"))
+        except Exception:
+            db_connected = False
+
+        total_apps = db.query(func.count(Application.id)).scalar() or 0
+        total_insts = db.query(func.count(Institution.id)).scalar() or 0
+
+        return {
+            "system": {
+                "project_name": settings.PROJECT_NAME,
+                "environment": settings.ENVIRONMENT,
+                "version": "1.0.0",
+                "handbook_edition": "APH 2026-2027",
+                "storage_type": settings.STORAGE_TYPE,
+                "database_engine": "PostgreSQL" if "postgresql" in settings.DATABASE_URL else "SQLite",
+                "database_connected": db_connected,
+                "total_persisted_applications": total_apps,
+                "total_persisted_institutions": total_insts,
+            },
+            "officer_profile": {
+                "name": "AICTE Scrutiny Officer",
+                "designation": "Assistant Director / Scrutiny Member",
+                "bureau": "Approval Bureau (AICTE Central Office)",
+                "email": "scrutiny.officer@aicte-india.org",
+                "assigned_region": "National Master (All Regions)",
+                "role": "Scrutiny Officer / Reviewer",
+                "permissions": [
+                    "READ_APPLICATIONS",
+                    "WRITE_REVIEWS",
+                    "EVALUATE_COMPLIANCE",
+                    "GENERATE_RISK_SCORES",
+                    "INSPECT_SECURE_DOCUMENTS",
+                    "VIEW_AUDIT_LOGS",
+                ],
+            },
+            "security_status": {
+                "document_authorization": "Enforced (Bearer & Signed Auth Token)",
+                "integrity_checks": "SHA-256 Cryptographic Hash Verification Active",
+                "audit_immutability": "Strict Append-Only",
+                "sso_two_factor": "Managed by AICTE Central IT (Disabled in current deployment)",
+                "biometric_auth": "Unimplemented (Planned for hardware token rollout)",
+            },
+        }
+

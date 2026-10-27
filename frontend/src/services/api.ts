@@ -12,6 +12,11 @@ import {
   PaginatedResponse,
   CreateApplicationPayload,
   CreateInstitutionPayload,
+  DocumentReviewItem,
+  QueueItem,
+  AuditEventItem,
+  AnalyticsReport,
+  SystemSettings,
 } from "../types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string) || "http://localhost:8000/api";
@@ -184,5 +189,82 @@ export const api = {
     request<Institution>(`/institutions/${id}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
+    }),
+
+  // Sidebar Modules APIs
+  getAllDocuments: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    document_type?: string;
+    application_id?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.append("page", params.page.toString());
+    if (params?.limit) query.append("limit", params.limit.toString());
+    if (params?.search) query.append("search", params.search);
+    if (params?.status && params.status !== "All") query.append("status", params.status);
+    if (params?.document_type && params.document_type !== "All") query.append("document_type", params.document_type);
+    if (params?.application_id) query.append("application_id", params.application_id);
+
+    return request<PaginatedResponse<DocumentReviewItem>>(`/documents?${query.toString()}`);
+  },
+
+  reviewDocument: (documentId: string, action: string, comments?: string) => {
+    const query = new URLSearchParams();
+    query.append("action", action);
+    if (comments) query.append("comments", comments);
+
+    return request<{ id: string; processing_status: string }>(`/documents/${documentId}/review?${query.toString()}`, {
+      method: "POST",
+    });
+  },
+
+  getReviewQueue: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    priority?: string;
+    category?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.append("page", params.page.toString());
+    if (params?.limit) query.append("limit", params.limit.toString());
+    if (params?.search) query.append("search", params.search);
+    if (params?.status && params.status !== "All") query.append("status", params.status);
+    if (params?.priority && params.priority !== "All") query.append("priority", params.priority);
+    if (params?.category && params.category !== "All") query.append("category", params.category);
+
+    return request<PaginatedResponse<QueueItem>>(`/queue?${query.toString()}`);
+  },
+
+  getAuditEvents: (params?: {
+    page?: number;
+    limit?: number;
+    entity_type?: string;
+    action?: string;
+    search?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.append("page", params.page.toString());
+    if (params?.limit) query.append("limit", params.limit.toString());
+    if (params?.entity_type && params.entity_type !== "All") query.append("entity_type", params.entity_type);
+    if (params?.action && params.action !== "All") query.append("action", params.action);
+    if (params?.search) query.append("search", params.search);
+
+    return request<PaginatedResponse<AuditEventItem>>(`/audit-events?${query.toString()}`);
+  },
+
+  getAnalyticsReport: () =>
+    request<AnalyticsReport>("/reports/analytics"),
+
+  getSystemSettings: () =>
+    request<SystemSettings>("/settings/system"),
+
+  rerunVerification: (applicationId: string) =>
+    request<{ application_id: string; compliance: any; risk: any }>(`/verification/rerun/${applicationId}`, {
+      method: "POST",
     }),
 };

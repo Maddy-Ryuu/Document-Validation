@@ -21,6 +21,11 @@ from app.services.services import (
     ApplicationService,
     InstitutionService,
     DashboardService,
+    DocumentService,
+    QueueService,
+    AuditService,
+    AnalyticsService,
+    SystemService,
     DuplicateInstitutionError,
 )
 from app.services.storage import get_storage_service
@@ -672,5 +677,160 @@ def get_application_risk_report(application_id: str, db: Session = Depends(get_d
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch risk report: {str(e)}",
         )
+
+
+# ==============================================================================
+# 9. Sidebar Modules: Document Review, Queue, Audit, Analytics, Settings
+# ==============================================================================
+
+@router.get("/documents", tags=["Documents"])
+def list_all_documents(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    document_type: Optional[str] = Query(None),
+    application_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Retrieves paginated list of documents with joined application and institution context."""
+    items, total = DocumentService.get_documents(
+        db,
+        page=page,
+        limit=limit,
+        search=search,
+        status=status,
+        document_type=document_type,
+        application_id=application_id,
+    )
+    pages = math.ceil(total / limit) if limit > 0 else 1
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": pages,
+    }
+
+
+@router.post("/documents/{document_id}/review", tags=["Documents"])
+def review_document(
+    document_id: str,
+    action: str = Query(..., description="Approved, Rejected, or Needs Review"),
+    comments: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Records an authorized review decision on a document and logs the audit event."""
+    if action not in ("Approved", "Rejected", "Needs Review"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid review action. Allowed actions: Approved, Rejected, Needs Review."
+        )
+    res = DocumentService.review_document(db, document_id, action, comments)
+    if not res:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    return res
+
+
+@router.get("/queue", tags=["Review Queue"])
+def list_review_queue(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    priority: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Retrieves the active worklist/queue of applications awaiting scrutiny or action."""
+    items, total = QueueService.get_review_queue(
+        db,
+        page=page,
+        limit=limit,
+        search=search,
+        status=status,
+        priority=priority,
+        category=category,
+    )
+    pages = math.ceil(total / limit) if limit > 0 else 1
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": pages,
+    }
+
+
+@router.get("/audit-events", tags=["Audit Trail"])
+def list_audit_events(
+    page: int = Query(1, ge=1),
+    limit: int = Query(25, ge=1, le=100),
+    entity_type: Optional[str] = Query(None),
+    action: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Retrieves immutable timeline of audit events, inspection actions, and system modifications."""
+    items, total = AuditService.get_audit_events(
+        db,
+        page=page,
+        limit=limit,
+        entity_type=entity_type,
+        action=action,
+        search=search,
+    )
+    pages = math.ceil(total / limit) if limit > 0 else 1
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": pages,
+    }
+
+
+@router.get("/reports/analytics", tags=["Reports"])
+def get_analytics_report(db: Session = Depends(get_db)):
+    """Aggregates platform-wide regulatory metrics, risk distributions, and verification outcomes."""
+    return AnalyticsService.get_analytics(db)
+
+
+@router.get("/settings/system", tags=["Settings"])
+def get_system_settings(db: Session = Depends(get_db)):
+    """Retrieves active system configuration, connected storage, database health, and scrutiny officer profile."""
+    return SystemService.get_system_info(db)
+
+
+@router.post("/verification/rerun/{application_id}", tags=["Verification"])
+def rerun_verification(application_id: str, db: Session = Depends(get_db)):
+    """Executes both regulatory compliance evaluation and deterministic risk scoring in one verified pass."""
+    app_obj = db.query(Application).filter(Application.id == application_id).first()
+    if not app_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    comp_report = ComplianceEngine.run_compliance_evaluation(db, application_id)
+    risk_report = RiskScoringEngine.evaluate_application_risk(db, application_id)
+
+    audit = AuditEvent(
+        entity_type="Application",
+        entity_id=application_id,
+        action="VERIFICATION_RERUN",
+        details={
+            "application_identifier": app_obj.application_identifier,
+            "compliance_status": comp_report.get("compliance_status"),
+            "risk_score": risk_report.score if hasattr(risk_report, "score") else None,
+            "risk_band": risk_report.risk_band if hasattr(risk_report, "risk_band") else None,
+        },
+    )
+    db.add(audit)
+    db.commit()
+
+    return {
+        "application_id": application_id,
+        "compliance": comp_report,
+        "risk": risk_report,
+    }
+
 
 

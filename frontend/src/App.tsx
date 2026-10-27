@@ -6,7 +6,12 @@ import { ApplicationsPage } from "./pages/ApplicationsPage";
 import { InstitutionsPage } from "./pages/InstitutionsPage";
 import { ApplicationDetailPage } from "./pages/ApplicationDetailPage";
 import { ComplianceRulesPage } from "./pages/ComplianceRulesPage";
-import { ComingSoonModule } from "./pages/ComingSoonModule";
+import { DocumentReviewPage } from "./pages/DocumentReviewPage";
+import { VerificationCenterPage } from "./pages/VerificationCenterPage";
+import { ReviewQueuePage } from "./pages/ReviewQueuePage";
+import { AuditTrailPage } from "./pages/AuditTrailPage";
+import { ReportsPage } from "./pages/ReportsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { NewApplicationModal } from "./components/NewApplicationModal";
 import { NewInstitutionModal } from "./components/NewInstitutionModal";
 
@@ -79,16 +84,9 @@ export function App() {
 
       case "documents":
         return (
-          <ComingSoonModule
-            title="Document Review & OCR Engine"
-            description="Deep multi-page OCR, PDF authenticity analysis, metadata extraction, and forensic document verification"
-            phase="Phase 2"
-            highlights={[
-              "AICTE Trust Deed & Land Registration Extraction",
-              "Fire Safety NOC Digital Signature Inspection",
-              "Architect Built-Up Area Plan Sanction Matching",
-              "Cryptographic SHA-256 Hash Tampering Audit",
-            ]}
+          <DocumentReviewPage
+            onSelectApplication={(id) => setSelectedAppId(id)}
+            refreshTrigger={refreshTrigger}
           />
         );
 
@@ -97,78 +95,38 @@ export function App() {
 
       case "verification":
         return (
-          <ComingSoonModule
-            title="Verification Center"
-            description="External official registry cross-verification with State Revenue, Fire, and AICTE National Master"
-            phase="Phase 3"
-            highlights={[
-              "State Land Revenue Portal Handshake",
-              "Municipal Corporation Sanction Cross-Check",
-              "Aadhaar-based Faculty Deposition Verification",
-              "UGC & Affiliating University NOC Validation",
-            ]}
+          <VerificationCenterPage
+            onSelectApplication={(id) => setSelectedAppId(id)}
+            refreshTrigger={refreshTrigger}
           />
         );
 
       case "queue":
         return (
-          <ComingSoonModule
-            title="Review Queue & Scrutiny Committee"
-            description="Worklist allocation, role-based scrutiny officer workflows, and formal objection issuance"
-            phase="Phase 2"
-            highlights={[
-              "Automated Workload & Regional Cell Assignment",
-              "Multi-tier Scrutiny Officer Consensus",
-              "Formal AICTE Deficiency Letter Generation",
-              "Institutional Appeal & Re-scrutiny Workflow",
-            ]}
+          <ReviewQueuePage
+            onSelectApplication={(id) => setSelectedAppId(id)}
+            refreshTrigger={refreshTrigger}
           />
         );
 
       case "audit":
         return (
-          <ComingSoonModule
-            title="Audit Trail & Regulatory Log"
-            description="Immutable timeline of all inspection actions, rule evaluation history, and reviewer notes"
-            phase="Phase 3"
-            highlights={[
-              "User Action & Decision Fingerprinting",
-              "Timestamped Forensic Change History",
-              "Exportable Regulatory Compliance Dossier",
-              "CBI / Vigilance Inspection Readiness Export",
-            ]}
+          <AuditTrailPage
+            onSelectApplication={(id) => setSelectedAppId(id)}
+            refreshTrigger={refreshTrigger}
           />
         );
 
       case "reports":
         return (
-          <ComingSoonModule
-            title="Regulatory Reports & Analytics"
-            description="State-wise sanction compliance metrics, discrepancy breakdown, and annual intake summaries"
-            phase="Phase 3"
-            highlights={[
-              "State & Regional Deficit Heatmaps",
-              "Annual Intake & Seat Matrix Trends",
-              "Non-Compliance Categorization Reports",
-              "Executive AICTE Council Briefing Exporters",
-            ]}
+          <ReportsPage
+            onSelectApplication={(id) => setSelectedAppId(id)}
+            refreshTrigger={refreshTrigger}
           />
         );
 
       case "settings":
-        return (
-          <ComingSoonModule
-            title="Platform Settings & Access Control"
-            description="Role-based permissions, regional bureau configurations, and API keys"
-            phase="Phase 3"
-            highlights={[
-              "RBAC Role Definition (Scrutiny Officer, Council, Admin)",
-              "Approval Process Handbook Edition Toggle",
-              "Session Timeout & Two-Factor Authentication",
-              "Database Backup & Archival Rules",
-            ]}
-          />
-        );
+        return <SettingsPage />;
 
       default:
         return null;
@@ -184,8 +142,22 @@ export function App() {
         return "Applications Registry";
       case "institutions":
         return "Institutions Master Registry";
+      case "documents":
+        return "Document Review & OCR Scrutiny";
+      case "rules":
+        return "Regulatory Compliance Rules";
+      case "verification":
+        return "Verification Center";
+      case "queue":
+        return "Scrutiny Officer Review Queue";
+      case "audit":
+        return "Regulatory Audit Trail";
+      case "reports":
+        return "Reports & Analytics";
+      case "settings":
+        return "Platform Settings & Security Profile";
       default:
-        return currentTab.charAt(0).toUpperCase() + currentTab.slice(1);
+        return "AICTE Scrutiny Portal";
     }
   };
 
@@ -198,6 +170,20 @@ export function App() {
         return "AICTE Formal Submission Tracking";
       case "institutions":
         return "Accredited Technical Institutions";
+      case "documents":
+        return "Cryptographic Verification & OCR Scrutiny";
+      case "rules":
+        return "Approval Process Handbook (APH 2026-27)";
+      case "verification":
+        return "Statutory Evidence Matching & Decision Support";
+      case "queue":
+        return "Prioritized Application Worklist";
+      case "audit":
+        return "Immutable Forensic Change History";
+      case "reports":
+        return "Institutional Compliance Metrics & Exporters";
+      case "settings":
+        return "Backend Infrastructure & Officer Identity";
       default:
         return "Regulatory Administration Module";
     }
