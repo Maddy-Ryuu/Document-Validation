@@ -797,6 +797,10 @@ export const ApplicationDetailPage: React.FC<ApplicationDetailPageProps> = ({
                       <span className="text-[10px] px-2 py-0.5 rounded bg-red-50 text-status-error font-medium border border-red-200">
                         Mandatory
                       </span>
+                    ) : item.is_conditional ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-amber-50 text-amber-700 font-medium border border-amber-200">
+                        Conditional
+                      </span>
                     ) : (
                       <span className="text-[10px] px-2 py-0.5 rounded bg-surface border border-border text-secondary-text">
                         Optional
@@ -806,6 +810,11 @@ export const ApplicationDetailPage: React.FC<ApplicationDetailPageProps> = ({
                   <p className="text-[11px] text-secondary-text leading-relaxed">
                     {item.description}
                   </p>
+                  {item.condition_description && (
+                    <div className="text-[10.5px] text-amber-800 bg-amber-50/70 px-2 py-1 rounded border border-amber-200/80">
+                      <span className="font-semibold">Condition:</span> {item.condition_description}
+                    </div>
+                  )}
 
                   {item.uploaded_document && (
                     <div className="text-[10px] text-secondary-text font-mono flex items-center gap-2 pt-1">
@@ -972,6 +981,7 @@ export const ApplicationDetailPage: React.FC<ApplicationDetailPageProps> = ({
         applicationId={app.id}
         defaultCategory={uploadCategory}
         replacesDocumentId={replaceDocId}
+        applicationCategory={app.application_category}
         onClose={() => setIsUploadOpen(false)}
         onSuccess={() => {
           loadData();

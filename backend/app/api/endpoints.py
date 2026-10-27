@@ -29,7 +29,7 @@ from app.services.services import (
     DuplicateInstitutionError,
 )
 from app.services.storage import get_storage_service
-from app.services.checklist import get_checklist_for_application
+from app.services.checklist import get_checklist_for_application, is_document_match
 from app.services.compliance_engine import ComplianceEngine
 from app.services.risk_engine import RiskScoringEngine
 from app.core.regulatory_rules import RULE_REGISTRY
@@ -498,7 +498,7 @@ def get_application_checklist(application_id: str, db: Session = Depends(get_db)
         # Find matching document (prefer highest version if multiple)
         matched_doc = None
         for doc in uploaded_docs:
-            if doc.document_type.lower() == item["category"].lower():
+            if is_document_match(doc.document_type, item["category"]):
                 if not matched_doc or doc.version > matched_doc.version:
                     matched_doc = doc
 
@@ -511,6 +511,8 @@ def get_application_checklist(application_id: str, db: Session = Depends(get_db)
                 description=item["description"],
                 criticality=item["criticality"],
                 is_mandatory=item["is_mandatory"],
+                is_conditional=item.get("is_conditional", False),
+                condition_description=item.get("condition_description"),
                 status=current_status,
                 uploaded_document=doc_resp,
             )

@@ -30,6 +30,12 @@ def override_get_db():
         db.close()
 
 
+def get_test_db():
+    if get_db in app.dependency_overrides:
+        return next(app.dependency_overrides[get_db]())
+    return TestingSessionLocal()
+
+
 app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -77,7 +83,7 @@ def test_checklist_endpoint():
     assert res.status_code == 200
     items = res.json()
     assert len(items) > 0
-    assert any(i["category"] == "Fire Safety NOC" for i in items)
+    assert any(i["category"] in ("Fire Safety Certificate", "Fire Safety NOC") for i in items)
     assert all(i["status"] == "Not uploaded" for i in items)
 
 
@@ -117,7 +123,7 @@ def test_pdf_document_upload_and_extraction():
 
     # 3. Synchronous OCR extraction check
     from app.services.document_processor import process_document_sync
-    db = TestingSessionLocal()
+    db = get_test_db()
     process_document_sync(db, doc_id)
     db.close()
 
@@ -144,7 +150,7 @@ def test_field_correction_and_audit():
     )
     doc_id = upload_res.json()["id"]
 
-    db = TestingSessionLocal()
+    db = get_test_db()
     from app.services.document_processor import process_document_sync
     process_document_sync(db, doc_id)
     db.close()

@@ -147,6 +147,8 @@ class ChecklistItem(BaseModel):
     description: str
     criticality: str
     is_mandatory: bool
+    is_conditional: bool = False
+    condition_description: Optional[str] = None
     status: str  # Not uploaded, Uploaded, Queued, Processing, Processed, Needs Review, Failed
     uploaded_document: Optional[DocumentResponse] = None
 
