@@ -16,7 +16,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { api } from "../services/api";
-import { Institution } from "../types";
+import { Institution, AuthUser } from "../types";
 import { formatDate } from "../lib/utils";
 
 interface InstitutionsPageProps {
@@ -41,6 +41,14 @@ export const InstitutionsPage: React.FC<InstitutionsPageProps> = ({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    try {
+      const raw = localStorage.getItem("aicte_auth_user");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     fetchInstitutions();
@@ -323,6 +331,20 @@ export const InstitutionsPage: React.FC<InstitutionsPageProps> = ({
                   Only authorized Administrators may delete institutions. An immutable forensic audit record will be logged with full deletion metadata. Central regulatory reference benchmarks and synthetic control datasets are strictly protected and cannot be deleted through this interface.
                 </p>
               </div>
+
+              {/* Role Check Alert */}
+              {currentUser && !["admin", "superadmin", "administrator"].includes(currentUser.role) && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded text-[11px] text-red-800 space-y-1">
+                  <div className="flex items-center space-x-1.5 font-semibold text-red-900">
+                    <ShieldAlert className="w-3.5 h-3.5 text-red-600" />
+                    <span>Administrative Privilege Required</span>
+                  </div>
+                  <p className="leading-relaxed">
+                    You are currently signed in as <strong>{currentUser.name}</strong> ({currentUser.email} &bull; <span className="font-mono">{currentUser.role}</span>).
+                    Only System Administrator accounts (<span className="font-mono font-medium">admin@aicte.gov.in</span>) possess statutory authority to delete institutions.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="p-3 bg-surface-muted/60 border-t border-border flex justify-end space-x-2">
