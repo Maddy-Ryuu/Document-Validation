@@ -5,6 +5,15 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     print(f"Starting AICTE Validation Platform backend on 0.0.0.0:{port}...")
 
+    # Ensure database tables exist (safe and idempotent for fresh staging / test environments)
+    try:
+        from app.db.session import engine, Base
+        import app.models  # Register all model metadata
+        Base.metadata.create_all(bind=engine)
+        print("Database schema verified and initialized.")
+    except Exception as e:
+        print(f"Notice: Database schema check notice: {e}")
+
     # Pre-start OCR model verification (non-blocking for overall server boot)
     try:
         from provision_models import provision_easyocr_models
