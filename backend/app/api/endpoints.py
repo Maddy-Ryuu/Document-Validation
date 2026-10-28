@@ -4,7 +4,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Header, status, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, func, or_
 
 from app.db.session import get_db
 from app.core.config import settings
@@ -842,3 +842,91 @@ def rerun_verification(application_id: str, db: Session = Depends(get_db)):
 
 
 
+
+
+# ===========================================================================
+# PHASE 2: AUTHORITATIVE REFERENCE DATA & MATCHING APIS
+# ===========================================================================
+
+from app.models.models import InstitutionReferenceRecord, ApprovedProgrammeReference, InstitutionApprovalHistory
+from app.services.reference_data import ReferenceDataService
+from app.schemas.schemas import InstitutionReferenceResponse, ReferenceMatchReportResponse
+
+
+@router.get("/reference-data/institutions", response_model=List[InstitutionReferenceResponse], tags=["Reference Data"])
+def list_reference_institutions(
+    state: Optional[str] = Query(None, description="Filter by state"),
+    standing_status: Optional[str] = Query(None, description="Filter by standing status"),
+    search: Optional[str] = Query(None, description="Search legal name or permanent ID"),
+    db: Session = Depends(get_db)
+):
+    """Lists authoritative official institution reference records from the AICTE Central Registry."""
+    ReferenceDataService.seed_authoritative_benchmarks(db)
+    query = db.query(InstitutionReferenceRecord)
+
+    if state:
+        query = query.filter(func.lower(InstitutionReferenceRecord.state) == state.lower())
+    if standing_status:
+        query = query.filter(func.lower(InstitutionReferenceRecord.standing_status) == standing_status.lower())
+    if search:
+        s = f"%{search.lower()}%"
+        query = query.filter(
+            or_(
+                func.lower(InstitutionReferenceRecord.legal_name).like(s),
+                func.lower(InstitutionReferenceRecord.aicte_permanent_id).like(s),
+                func.lower(InstitutionReferenceRecord.district_or_city).like(s),
+            )
+        )
+
+    records = query.order_by(InstitutionReferenceRecord.aicte_permanent_id.asc()).all()
+    return records
+
+
+@router.get("/reference-data/institutions/{ref_id}", response_model=InstitutionReferenceResponse, tags=["Reference Data"])
+def get_reference_institution(ref_id: str, db: Session = Depends(get_db)):
+    """Retrieves an authoritative institution reference record with approved programmes and approval histories."""
+    ReferenceDataService.seed_authoritative_benchmarks(db)
+    record = db.query(InstitutionReferenceRecord).filter(
+        or_(
+            InstitutionReferenceRecord.id == ref_id,
+            InstitutionReferenceRecord.aicte_permanent_id == ref_id
+        )
+    ).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Authoritative reference record not found")
+    return record
+
+
+@router.get("/applications/{application_id}/reference-match", response_model=ReferenceMatchReportResponse, tags=["Reference Data"])
+def get_application_reference_match(application_id: str, db: Session = Depends(get_db)):
+    """Cross-verifies submitted application data against official AICTE reference records, yielding explainable findings."""
+    try:
+        report = ReferenceDataService.match_application_against_reference(db, application_id)
+        return report
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post("/applications/{application_id}/reference-match", response_model=ReferenceMatchReportResponse, tags=["Reference Data"])
+def trigger_application_reference_match(application_id: str, db: Session = Depends(get_db)):
+    """Triggers / refreshes reference record matching and logs audit trail."""
+    try:
+        report = ReferenceDataService.match_application_against_reference(db, application_id)
+
+        audit = AuditEvent(
+            entity_type="Application",
+            entity_id=application_id,
+            action="REFERENCE_MATCH_AUDIT",
+            details={
+                "reference_matched": report["reference_matched"],
+                "verification_status": report["verification_status"],
+                "recommendation": report["recommendation"],
+                "findings_count": len(report["findings"])
+            }
+        )
+        db.add(audit)
+        db.commit()
+
+        return report
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

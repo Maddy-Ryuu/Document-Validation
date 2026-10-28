@@ -14,6 +14,9 @@ from app.models.models import (
     ReviewAction,
     AuditEvent,
     Notification,
+    InstitutionReferenceRecord,
+    ApprovedProgrammeReference,
+    InstitutionApprovalHistory,
 )
 
 __all__ = [
@@ -32,4 +35,7 @@ __all__ = [
     "ReviewAction",
     "AuditEvent",
     "Notification",
+    "InstitutionReferenceRecord",
+    "ApprovedProgrammeReference",
+    "InstitutionApprovalHistory",
 ]

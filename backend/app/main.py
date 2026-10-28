@@ -37,12 +37,20 @@ app.add_middleware(
 def startup_event():
     """Ensures database tables exist on server startup (idempotent for SQLite and PostgreSQL)."""
     try:
-        from app.db.session import engine, Base
+        from app.db.session import engine, Base, SessionLocal
         import app.models  # Register all models
         Base.metadata.create_all(bind=engine)
         logger.info("Database schema initialized and verified on startup.")
+
+        # Seed authoritative reference benchmarks if empty
+        from app.services.reference_data import ReferenceDataService
+        db = SessionLocal()
+        try:
+            ReferenceDataService.seed_authoritative_benchmarks(db)
+        finally:
+            db.close()
     except Exception as e:
-        logger.error(f"Failed to initialize database schema: {e}", exc_info=True)
+        logger.error(f"Startup initialization notice: {e}", exc_info=True)
 
 
 @app.exception_handler(Exception)

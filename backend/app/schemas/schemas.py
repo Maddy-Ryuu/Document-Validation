@@ -304,3 +304,99 @@ class PaginatedResponse(BaseModel):
     page: int
     limit: int
     pages: int
+
+
+# ===========================================================================
+# PHASE 2: AUTHORITATIVE REFERENCE DATA SCHEMAS
+# ===========================================================================
+
+class ApprovedProgrammeSchema(BaseModel):
+    id: str
+    programme_name: str
+    course_name: str
+    level: str
+    approved_intake: int
+    nri_quota_approved: bool
+    nri_quota_intake: int
+    pio_fn_quota_approved: bool
+    pio_fn_quota_intake: int
+    accreditation_status: str
+    accreditation_valid_until: Optional[datetime] = None
+    academic_year: str
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InstitutionApprovalHistorySchema(BaseModel):
+    id: str
+    academic_year: str
+    eoa_application_number: Optional[str] = None
+    eoa_issue_date: Optional[datetime] = None
+    effective_start_date: datetime
+    effective_end_date: datetime
+    total_sanctioned_intake: int
+    approval_type: str
+    issuing_authority: str
+    is_latest: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InstitutionReferenceResponse(BaseModel):
+    id: str
+    aicte_permanent_id: str
+    legal_name: str
+    institution_type: str
+    state: str
+    district_or_city: str
+    address: Optional[str] = None
+    standing_status: str
+    established_year: Optional[int] = None
+    initial_approval_year: Optional[int] = None
+    latest_approval_year: Optional[int] = None
+    verification_status: str
+    source_provenance: str
+    source_document_ref: Optional[str] = None
+    data_freshness_date: datetime
+    is_official: bool
+    created_at: datetime
+    approved_programmes: List[ApprovedProgrammeSchema] = []
+    approval_history: List[InstitutionApprovalHistorySchema] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReferenceMatchFieldResult(BaseModel):
+    submitted_value: Optional[str]
+    official_value: Optional[str]
+    match: bool
+    confidence: float
+    notes: Optional[str] = None
+
+
+class ReferenceMatchFinding(BaseModel):
+    finding_type: str
+    severity: str
+    message: str
+    reference_source: str
+    effective_date: Optional[str] = None
+
+
+class ReferenceMatchReportResponse(BaseModel):
+    application_id: str
+    institution_id: str
+    reference_matched: bool
+    institution_reference_id: Optional[str] = None
+    aicte_permanent_id: Optional[str] = None
+    legal_name: Optional[str] = None
+    verification_status: str
+    source_provenance: Optional[str] = None
+    data_freshness_date: Optional[datetime] = None
+    is_official: bool
+    standing_status: Optional[str] = None
+    matched_fields: Dict[str, ReferenceMatchFieldResult]
+    findings: List[ReferenceMatchFinding]
+    programmes_summary: List[ApprovedProgrammeSchema] = []
+    latest_approval: Optional[InstitutionApprovalHistorySchema] = None
+    recommendation: str

@@ -329,3 +329,117 @@ class DocumentBlob(Base):
     file_size_bytes = Column(Integer, nullable=False)
     content_type = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+# ===========================================================================
+# PHASE 2: AUTHORITATIVE REFERENCE DATA MODELS
+# ===========================================================================
+
+class InstitutionReferenceRecord(Base):
+    """
+    Authoritative regulatory reference record for an AICTE-approved institution.
+    Maintains verified official state, standing, permanent ID, and provenance.
+    """
+    __tablename__ = "institution_reference_records"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    aicte_permanent_id = Column(String(100), unique=True, nullable=False, index=True)
+    legal_name = Column(String(255), nullable=False)
+    institution_type = Column(String(100), nullable=False)  # Engineering, Management, Pharmacy, Polytechnic
+    state = Column(String(100), nullable=False)
+    district_or_city = Column(String(100), nullable=False)
+    address = Column(Text, nullable=True)
+    normalized_name = Column(String(255), nullable=False, index=True)
+    normalized_city = Column(String(100), nullable=False, index=True)
+    normalized_state = Column(String(100), nullable=False, index=True)
+
+    standing_status = Column(String(50), nullable=False, default="Approved")  # Approved, Under Scrutiny, De-notified, Closed
+    established_year = Column(Integer, nullable=True)
+    initial_approval_year = Column(Integer, nullable=True)
+    latest_approval_year = Column(Integer, nullable=True)
+
+    # Provenance and Data Freshness
+    verification_status = Column(String(50), nullable=False, default="OFFICIAL_VERIFIED")  # OFFICIAL_VERIFIED, PROVISIONAL_PENDING, SYNTHETIC_BENCHMARK, UNVERIFIED
+    source_provenance = Column(String(150), nullable=False, default="AICTE Central Regulatory Registry")
+    source_document_ref = Column(String(150), nullable=True)
+    data_freshness_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    is_official = Column(Boolean, default=True, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    approved_programmes = relationship("ApprovedProgrammeReference", back_populates="institution_reference", cascade="all, delete-orphan")
+    approval_history = relationship("InstitutionApprovalHistory", back_populates="institution_reference", cascade="all, delete-orphan")
+
+
+@event.listens_for(InstitutionReferenceRecord, "before_insert")
+def populate_ref_normalized_fields_before_insert(mapper, connection, target):
+    target.normalized_name = normalize_institution_field(target.legal_name)
+    target.normalized_city = normalize_institution_field(target.district_or_city)
+    target.normalized_state = normalize_institution_field(target.state)
+
+
+@event.listens_for(InstitutionReferenceRecord, "before_update")
+def populate_ref_normalized_fields_before_update(mapper, connection, target):
+    if target.legal_name:
+        target.normalized_name = normalize_institution_field(target.legal_name)
+    if target.district_or_city:
+        target.normalized_city = normalize_institution_field(target.district_or_city)
+    if target.state:
+        target.normalized_state = normalize_institution_field(target.state)
+
+
+class ApprovedProgrammeReference(Base):
+    """
+    Authoritative reference record for approved academic courses, levels, and sanctioned intakes.
+    """
+    __tablename__ = "approved_programmes"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    institution_reference_id = Column(String(36), ForeignKey("institution_reference_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    programme_name = Column(String(150), nullable=False)  # Engineering and Technology, Management, etc.
+    course_name = Column(String(200), nullable=False)     # Computer Science and Engineering, etc.
+    level = Column(String(50), nullable=False)            # UG, PG, Diploma
+    approved_intake = Column(Integer, nullable=False)     # Official sanctioned intake capacity
+    
+    # Quota Approvals
+    nri_quota_approved = Column(Boolean, default=False, nullable=False)
+    nri_quota_intake = Column(Integer, default=0, nullable=False)
+    pio_fn_quota_approved = Column(Boolean, default=False, nullable=False)
+    pio_fn_quota_intake = Column(Integer, default=0, nullable=False)
+
+    # Accreditation status
+    accreditation_status = Column(String(100), default="Non-Accredited", nullable=False)  # NBA Accredited, NAAC A+, Non-Accredited
+    accreditation_valid_until = Column(DateTime, nullable=True)
+
+    academic_year = Column(String(20), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    institution_reference = relationship("InstitutionReferenceRecord", back_populates="approved_programmes")
+
+
+class InstitutionApprovalHistory(Base):
+    """
+    Chronological approval records (EoA, Intake Increase, New Institute Approvals)
+    verifying continuous regulatory compliance across academic years.
+    """
+    __tablename__ = "institution_approval_history"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    institution_reference_id = Column(String(36), ForeignKey("institution_reference_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    academic_year = Column(String(20), nullable=False, index=True)  # e.g., 2025-2026
+    eoa_application_number = Column(String(100), nullable=True)
+    eoa_issue_date = Column(DateTime, nullable=True)
+    effective_start_date = Column(DateTime, nullable=False)
+    effective_end_date = Column(DateTime, nullable=False)
+    total_sanctioned_intake = Column(Integer, nullable=False)
+    approval_type = Column(String(100), default="Extension of Approval", nullable=False)
+    issuing_authority = Column(String(150), default="Member Secretary, AICTE New Delhi", nullable=False)
+    is_latest = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    institution_reference = relationship("InstitutionReferenceRecord", back_populates="approval_history")
+
