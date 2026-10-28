@@ -33,6 +33,18 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+def startup_event():
+    """Ensures database tables exist on server startup (idempotent for SQLite and PostgreSQL)."""
+    try:
+        from app.db.session import engine, Base
+        import app.models  # Register all models
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database schema initialized and verified on startup.")
+    except Exception as e:
+        logger.error(f"Failed to initialize database schema: {e}", exc_info=True)
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled error occurred at {request.url.path}: {str(exc)}", exc_info=True)
