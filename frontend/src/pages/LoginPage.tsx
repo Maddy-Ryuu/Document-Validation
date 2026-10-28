@@ -119,49 +119,51 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             </button>
           </form>
 
-          {/* Quick-Select Bootstrap Demonstration Credentials */}
-          <div className="pt-4 border-t border-border space-y-2.5">
-            <span className="text-[11px] font-semibold text-secondary-text block">
-              Designated Scrutiny Accounts:
-            </span>
-            <div className="space-y-1.5 text-[11px]">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin("officer@aicte.gov.in", "aicte2026!")}
-                className="w-full p-2 bg-surface-muted/60 hover:bg-surface border border-border rounded flex items-center justify-between text-left transition-colors"
-              >
-                <div>
-                  <span className="font-semibold text-primary-text block">AICTE Scrutiny Officer</span>
-                  <span className="text-secondary-text text-[10px]">officer@aicte.gov.in</span>
-                </div>
-                <span className="text-[10px] text-primary-orange font-medium">Use &rarr;</span>
-              </button>
+          {/* Quick-Select Bootstrap Demonstration Credentials (Development / Demo Mode) */}
+          {(!import.meta.env.PROD || import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true") && (
+            <div className="pt-4 border-t border-border space-y-2.5">
+              <span className="text-[11px] font-semibold text-secondary-text block">
+                Designated Scrutiny Accounts (Demo Mode):
+              </span>
+              <div className="space-y-1.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin("officer@aicte.gov.in", "aicte2026!")}
+                  className="w-full p-2 bg-surface-muted/60 hover:bg-surface border border-border rounded flex items-center justify-between text-left transition-colors"
+                >
+                  <div>
+                    <span className="font-semibold text-primary-text block">AICTE Scrutiny Officer</span>
+                    <span className="text-secondary-text text-[10px]">officer@aicte.gov.in</span>
+                  </div>
+                  <span className="text-[10px] text-primary-orange font-medium">Use &rarr;</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handleQuickLogin("reviewer@aicte.gov.in", "reviewer2026!")}
-                className="w-full p-2 bg-surface-muted/60 hover:bg-surface border border-border rounded flex items-center justify-between text-left transition-colors"
-              >
-                <div>
-                  <span className="font-semibold text-primary-text block">Senior Reviewer</span>
-                  <span className="text-secondary-text text-[10px]">reviewer@aicte.gov.in</span>
-                </div>
-                <span className="text-[10px] text-primary-orange font-medium">Use &rarr;</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin("reviewer@aicte.gov.in", "reviewer2026!")}
+                  className="w-full p-2 bg-surface-muted/60 hover:bg-surface border border-border rounded flex items-center justify-between text-left transition-colors"
+                >
+                  <div>
+                    <span className="font-semibold text-primary-text block">Senior Reviewer</span>
+                    <span className="text-secondary-text text-[10px]">reviewer@aicte.gov.in</span>
+                  </div>
+                  <span className="text-[10px] text-primary-orange font-medium">Use &rarr;</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handleQuickLogin("admin@aicte.gov.in", "admin2026!")}
-                className="w-full p-2 bg-surface-muted/60 hover:bg-surface border border-border rounded flex items-center justify-between text-left transition-colors"
-              >
-                <div>
-                  <span className="font-semibold text-primary-text block">System Administrator</span>
-                  <span className="text-secondary-text text-[10px]">admin@aicte.gov.in</span>
-                </div>
-                <span className="text-[10px] text-primary-orange font-medium">Use &rarr;</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin("admin@aicte.gov.in", "admin2026!")}
+                  className="w-full p-2 bg-surface-muted/60 hover:bg-surface border border-border rounded flex items-center justify-between text-left transition-colors"
+                >
+                  <div>
+                    <span className="font-semibold text-primary-text block">System Administrator</span>
+                    <span className="text-secondary-text text-[10px]">admin@aicte.gov.in</span>
+                  </div>
+                  <span className="text-[10px] text-primary-orange font-medium">Use &rarr;</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Security Notice */}

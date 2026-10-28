@@ -1063,8 +1063,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             token = create_access_token(user_data)
             return {"access_token": token, "token_type": "bearer", "user": user_data}
 
-    # 2. Check designated bootstrap officer credentials
-    if email in BOOTSTRAP_OFFICERS:
+    # 2. Check designated bootstrap officer credentials (development / staging demo fallback only)
+    is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
+    allow_demo = os.getenv("ALLOW_BOOTSTRAP_AUTH", "true" if not is_production else "false").lower() in ("true", "1")
+    if allow_demo and email in BOOTSTRAP_OFFICERS:
         officer = BOOTSTRAP_OFFICERS[email]
         if plain_pw == officer["password"]:
             user_data = {
