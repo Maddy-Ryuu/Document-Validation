@@ -272,6 +272,8 @@ export const VerificationCenterPage: React.FC<VerificationCenterPageProps> = ({
                 ? "All submitted credentials match authoritative AICTE Central Portal registry records in good standing."
                 : isReject
                 ? "Severe discrepancies detected: unauthorized quota submission, adverse disciplinary standing, or identity mismatch."
+                : status === "SYNTHETIC_BENCHMARK"
+                ? "Synthetic demonstration benchmark match: cannot establish official statutory verification without authentic registry records. Routing to Manual Scrutiny Queue."
                 : "Manual scrutiny required: Submitted records are unverified, missing from central registry, or require officer examination."}
             </p>
           </div>
@@ -304,6 +306,10 @@ export const VerificationCenterPage: React.FC<VerificationCenterPageProps> = ({
         return <span className="px-2 py-0.5 text-[10px] font-semibold bg-rose-100 text-rose-800 rounded border border-rose-300">Unapproved Quota</span>;
       case "ADVERSE_STANDING":
         return <span className="px-2 py-0.5 text-[10px] font-semibold bg-red-100 text-red-900 rounded border border-red-400">Adverse Standing</span>;
+      case "SYNTHETIC_REFERENCE_BENCHMARK":
+        return <span className="px-2 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-900 rounded border border-amber-300">Synthetic Benchmark</span>;
+      case "PROGRAMME_INTAKE_MISMATCH":
+        return <span className="px-2 py-0.5 text-[10px] font-semibold bg-red-100 text-red-800 rounded border border-red-300">Programme / Intake Mismatch</span>;
       default:
         return <span className="px-2 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-800 rounded border border-gray-300">{type}</span>;
     }
@@ -720,7 +726,7 @@ export const VerificationCenterPage: React.FC<VerificationCenterPageProps> = ({
                         <div>
                           <span className="text-secondary-text block">Standing Status:</span>
                           <span className={`font-semibold ${
-                            refMatchReport.standing_status === "APPROVED_IN_GOOD_STANDING"
+                            refMatchReport.standing_status === "APPROVED_IN_GOOD_STANDING" || refMatchReport.standing_status === "Approved"
                               ? "text-emerald-700"
                               : "text-red-700"
                           }`}>
@@ -1106,7 +1112,7 @@ export const VerificationCenterPage: React.FC<VerificationCenterPageProps> = ({
                               {reg.legal_name}
                             </span>
                             <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-                              reg.standing_status === "APPROVED_IN_GOOD_STANDING"
+                              reg.standing_status === "APPROVED_IN_GOOD_STANDING" || reg.standing_status === "Approved"
                                 ? "bg-emerald-100 text-emerald-800"
                                 : "bg-red-100 text-red-800"
                             }`}>

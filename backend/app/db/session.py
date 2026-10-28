@@ -4,7 +4,12 @@ from app.core.config import settings
 
 # URL normalization - ensure psycopg 3 dialect for PostgreSQL
 db_url = settings.DATABASE_URL
-if db_url.startswith("postgres://"):
+if db_url == "sqlite:///./aicte_validation.db":
+    import os
+    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    db_path = os.path.join(backend_dir, "aicte_validation.db")
+    db_url = f"sqlite:///{db_path}"
+elif db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
 elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
     db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
