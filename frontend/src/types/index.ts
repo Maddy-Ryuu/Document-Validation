@@ -333,3 +333,101 @@ export interface SystemSettings {
     biometric_auth: string;
   };
 }
+
+
+// ===========================================================================
+// PHASE 2: AUTHORITATIVE REFERENCE DATA & CROSS-VERIFICATION TYPES
+// ===========================================================================
+
+export interface ApprovedProgrammeReference {
+  id: string;
+  programme_name: string;
+  course_name: string;
+  level: string;
+  approved_intake: number;
+  nri_quota_approved: boolean;
+  nri_quota_intake: number;
+  pio_fn_quota_approved: boolean;
+  pio_fn_quota_intake: number;
+  accreditation_status: string;
+  accreditation_valid_until?: string | null;
+  academic_year: string;
+  is_active: boolean;
+}
+
+export interface InstitutionApprovalHistoryReference {
+  id: string;
+  academic_year: string;
+  eoa_application_number?: string | null;
+  eoa_issue_date?: string | null;
+  effective_start_date: string;
+  effective_end_date: string;
+  total_sanctioned_intake: number;
+  approval_type: string;
+  issuing_authority: string;
+  is_latest: boolean;
+}
+
+export interface InstitutionReferenceRecord {
+  id: string;
+  aicte_permanent_id: string;
+  legal_name: string;
+  institution_type: string;
+  state: string;
+  district_or_city: string;
+  address?: string | null;
+  standing_status: "APPROVED_IN_GOOD_STANDING" | "DEFICIENT" | "WITHDRAWN_OR_REVOKED" | string;
+  established_year?: number | null;
+  initial_approval_year?: number | null;
+  latest_approval_year?: number | null;
+  verification_status: "OFFICIAL_VERIFIED" | "PROVISIONAL_PENDING" | "SYNTHETIC_BENCHMARK" | "UNVERIFIED" | string;
+  source_provenance: string;
+  source_document_ref?: string | null;
+  data_freshness_date: string;
+  is_official: boolean;
+  created_at: string;
+  approved_programmes: ApprovedProgrammeReference[];
+  approval_history: InstitutionApprovalHistoryReference[];
+}
+
+export interface ReferenceMatchFieldResult {
+  submitted_value?: string | null;
+  official_value?: string | null;
+  match: boolean;
+  confidence: number;
+  notes?: string | null;
+}
+
+export interface ReferenceMatchFinding {
+  finding_type:
+    | "REFERENCE_VERIFIED"
+    | "REFERENCE_MISMATCH"
+    | "REFERENCE_NOT_FOUND"
+    | "OUTDATED_APPROVAL"
+    | "UNAPPROVED_QUOTA"
+    | "ADVERSE_STANDING"
+    | string;
+  severity: "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | string;
+  message: string;
+  reference_source: string;
+  effective_date?: string | null;
+}
+
+export interface ReferenceMatchReport {
+  application_id: string;
+  institution_id: string;
+  reference_matched: boolean;
+  institution_reference_id?: string | null;
+  aicte_permanent_id?: string | null;
+  legal_name?: string | null;
+  verification_status: "OFFICIAL_VERIFIED" | "PROVISIONAL_PENDING" | "SYNTHETIC_BENCHMARK" | "UNVERIFIED" | string;
+  source_provenance?: string | null;
+  data_freshness_date?: string | null;
+  is_official: boolean;
+  standing_status?: string | null;
+  matched_fields: Record<string, ReferenceMatchFieldResult>;
+  findings: ReferenceMatchFinding[];
+  programmes_summary: ApprovedProgrammeReference[];
+  latest_approval?: InstitutionApprovalHistoryReference | null;
+  recommendation: "AUTO_VERIFIED" | "MANUAL_SCRUTINY_REQUIRED" | "REJECT_UNAUTHORIZED" | string;
+}

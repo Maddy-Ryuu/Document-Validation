@@ -17,6 +17,8 @@ import {
   AuditEventItem,
   AnalyticsReport,
   SystemSettings,
+  InstitutionReferenceRecord,
+  ReferenceMatchReport,
 } from "../types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string) || "http://localhost:8000/api";
@@ -267,4 +269,24 @@ export const api = {
     request<{ application_id: string; compliance: any; risk: any }>(`/verification/rerun/${applicationId}`, {
       method: "POST",
     }),
+
+  // Phase 2 Authoritative Reference Data & Cross-Verification APIs
+  getApplicationReferenceMatch: (applicationId: string) =>
+    request<ReferenceMatchReport>(`/applications/${applicationId}/reference-match`),
+
+  runApplicationReferenceMatch: (applicationId: string) =>
+    request<ReferenceMatchReport>(`/applications/${applicationId}/reference-match`, {
+      method: "POST",
+    }),
+
+  getReferenceInstitutions: (params?: { state?: string; standing_status?: string; search?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.state) query.append("state", params.state);
+    if (params?.standing_status) query.append("standing_status", params.standing_status);
+    if (params?.search) query.append("search", params.search);
+    return request<InstitutionReferenceRecord[]>(`/reference-data/institutions?${query.toString()}`);
+  },
+
+  getReferenceInstitutionById: (refId: string) =>
+    request<InstitutionReferenceRecord>(`/reference-data/institutions/${refId}`),
 };
