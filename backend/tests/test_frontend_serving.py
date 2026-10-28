@@ -32,11 +32,19 @@ def test_api_routes_not_intercepted_by_spa_fallback():
 
 def test_static_assets_serving():
     """Verify static assets are properly served with correct MIME types."""
-    res_css = client.get("/assets/index-DFgmm7es.css")
+    import os
+    from app.main import STATIC_DIR
+    assets_dir = os.path.join(STATIC_DIR, "assets")
+    css_files = [f for f in os.listdir(assets_dir) if f.endswith(".css")]
+    js_files = [f for f in os.listdir(assets_dir) if f.endswith(".js")]
+    assert len(css_files) > 0, "No CSS assets found in static/assets"
+    assert len(js_files) > 0, "No JS assets found in static/assets"
+
+    res_css = client.get(f"/assets/{css_files[0]}")
     assert res_css.status_code == 200
     assert "text/css" in res_css.headers.get("content-type", "")
 
-    res_js = client.get("/assets/index-CC7bS7VL.js")
+    res_js = client.get(f"/assets/{js_files[0]}")
     assert res_js.status_code == 200
     assert any(m in res_js.headers.get("content-type", "") for m in ["javascript", "text/plain"])
 

@@ -72,7 +72,7 @@ def parse_date(date_str: Optional[str]) -> Optional[datetime]:
     """Tolerantly parses diverse date strings into a datetime object."""
     if not date_str:
         return None
-    date_clean = date_str.split()[0].strip()
+    date_clean = date_str.split()[0].strip().replace(',', '/')
     formats = [
         "%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d", "%d.%m.%Y",
         "%d-%b-%Y", "%d %b %Y", "%d %B %Y", "%Y/%m/%d"

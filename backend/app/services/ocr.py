@@ -7,67 +7,214 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
+# Resource safety limits
+MAX_DOCUMENT_PAGE_COUNT = 50
+MAX_DOCUMENT_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+
+_ocr_reader = None
+_ocr_initialized = False
+
+
+def get_ocr_reader() -> Optional[Any]:
+    """
+    Lazy singleton initialization of EasyOCR engine configured for CPU execution
+    with local model storage to prevent unprivileged path creation and runtime downloads.
+    """
+    global _ocr_reader, _ocr_initialized
+    if _ocr_initialized:
+        return _ocr_reader
+    try:
+        import easyocr
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        model_dir = os.path.join(base_dir, "storage", "models", "easyocr")
+        user_net_dir = os.path.join(model_dir, "user_network")
+        os.makedirs(user_net_dir, exist_ok=True)
+
+        download = True
+        if os.path.isfile(os.path.join(model_dir, "craft_mlt_25k.pth")) and os.path.isfile(os.path.join(model_dir, "english_g2.pth")):
+            download = False
+
+        _ocr_reader = easyocr.Reader(
+            ["en"],
+            gpu=False,
+            model_storage_directory=model_dir,
+            user_network_directory=user_net_dir,
+            download_enabled=download,
+            verbose=False,
+        )
+        logger.info("EasyOCR engine successfully initialized.")
+    except Exception as e:
+        logger.warning(f"EasyOCR reader initialization unavailable or failed: {e}")
+        _ocr_reader = None
+    finally:
+        _ocr_initialized = True
+    return _ocr_reader
+
 
 class OCRExtractorService:
     @staticmethod
     def extract_text_and_pages(file_path: str, mime_type: str) -> Tuple[str, int, List[Dict[str, Any]], float]:
         """
-        Extracts text from PDF or image using fast digital vector extraction and image heuristics.
+        Executes hybrid document processing:
+        1. Fast-path digital vector text extraction via PyMuPDF.
+        2. Per-page rasterization and genuine OCR (EasyOCR) for scanned or image-only pages.
+        3. Direct genuine OCR for uploaded image files.
         Returns: (full_text, page_count, pages_metadata, average_confidence)
         """
+        if not os.path.isfile(file_path):
+            raise ValueError(f"Document file not found at path: {file_path}")
+
+        file_size = os.path.getsize(file_path)
+        if file_size > MAX_DOCUMENT_FILE_SIZE:
+            raise ValueError(f"File size ({file_size / (1024*1024):.1f} MB) exceeds maximum permitted limit of 50 MB.")
+
         pages_metadata: List[Dict[str, Any]] = []
-        all_text_parts = []
-        confidences = []
+        all_text_parts: List[str] = []
+        confidences: List[float] = []
 
         if "pdf" in mime_type.lower() or file_path.lower().endswith(".pdf"):
             try:
                 doc = pymupdf.open(file_path)
+            except Exception as e:
+                raise ValueError(f"Corrupt, damaged, or unreadable PDF document: {str(e)}")
+
+            try:
+                if doc.is_encrypted:
+                    raise ValueError("Password-protected or encrypted PDF documents cannot be processed.")
+
                 page_count = len(doc)
+                if page_count == 0:
+                    raise ValueError("PDF document contains 0 pages.")
+                if page_count > MAX_DOCUMENT_PAGE_COUNT:
+                    raise ValueError(f"Document contains {page_count} pages, exceeding the maximum allowed limit of {MAX_DOCUMENT_PAGE_COUNT} pages.")
 
                 for page_idx in range(page_count):
                     page = doc[page_idx]
                     page_num = page_idx + 1
-                    # Extract embedded vector digital text
-                    text = page.get_text("text").strip()
 
-                    if len(text) > 0:
-                        confidences.append(0.98)
+                    # 1. Attempt digital vector text extraction first
+                    digital_text = page.get_text("text").strip()
+                    alnum_chars = re.sub(r"[^A-Za-z0-9]", "", digital_text)
+
+                    if len(alnum_chars) >= 25:
+                        # Page has usable digital vector text (fast path)
+                        method = "DIGITAL_TEXT"
+                        page_text = digital_text
+                        page_conf = 0.98
+                        is_scanned = False
                     else:
-                        text = f"[Scanned page {page_num} detected. Raster graphic analyzed.]"
-                        confidences.append(0.85)
+                        # Page lacks usable text; render raster pixmap and run genuine OCR
+                        method = "OCR_RASTER"
+                        is_scanned = True
+                        try:
+                            pix = page.get_pixmap(dpi=150)
+                            img_bytes = pix.tobytes("png")
+                            pix = None  # Free pixmap memory immediately
 
-                    all_text_parts.append(f"--- [Page {page_num}] ---\n{text}")
+                            reader = get_ocr_reader()
+                            if reader:
+                                results = reader.readtext(img_bytes)
+                                lines = [r[1].strip() for r in results if r[1] and r[1].strip()]
+                                confs = [float(r[2]) for r in results if r[1] and r[1].strip()]
+                                if lines:
+                                    ocr_text = "\n".join(lines)
+                                    page_conf = round(sum(confs) / len(confs), 2)
+                                    page_text = ocr_text
+                                else:
+                                    page_text = "[No legible text recognized by OCR on scanned page]"
+                                    page_conf = 0.0
+                            else:
+                                method = "OCR_UNAVAILABLE"
+                                page_text = "[Scanned page detected; OCR engine unavailable in environment]"
+                                page_conf = 0.0
+                        except Exception as ocr_err:
+                            logger.error(f"OCR raster processing failed on page {page_num}: {ocr_err}", exc_info=True)
+                            method = "OCR_FAILED"
+                            page_text = f"[OCR processing failed on page {page_num}: {str(ocr_err)}]"
+                            page_conf = 0.0
+
+                    confidences.append(page_conf)
+                    all_text_parts.append(f"--- [Page {page_num} ({method})] ---\n{page_text}")
                     pages_metadata.append({
                         "page": page_num,
-                        "text": text,
-                        "char_count": len(text)
+                        "text": page_text,
+                        "char_count": len(page_text),
+                        "extraction_method": method,
+                        "is_scanned": is_scanned,
+                        "confidence": page_conf,
                     })
 
-                doc.close()
                 full_text = "\n\n".join(all_text_parts)
-                avg_conf = sum(confidences) / len(confidences) if confidences else 0.90
+                avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
                 return full_text, page_count, pages_metadata, round(avg_conf, 2)
 
-            except Exception as e:
-                logger.error(f"Error processing PDF with PyMuPDF: {e}", exc_info=True)
-                raise
+            finally:
+                doc.close()
 
         else:
-            # Direct Image inspection
-            with Image.open(file_path) as img:
-                w, h = img.size
-                text = f"[Document Image: {w}x{h} px registered for regulatory inspection]"
-            full_text = f"--- [Page 1] ---\n{text}"
-            pages_metadata = [{"page": 1, "text": text, "char_count": len(text)}]
-            return full_text, 1, pages_metadata, 0.88
+            # Direct Image inspection and genuine OCR
+            try:
+                with Image.open(file_path) as img:
+                    img.verify()
+            except Exception as e:
+                raise ValueError(f"Corrupt, damaged, or unsupported image file: {str(e)}")
+
+            reader = get_ocr_reader()
+            if reader:
+                try:
+                    results = reader.readtext(file_path)
+                    lines = [r[1].strip() for r in results if r[1] and r[1].strip()]
+                    confs = [float(r[2]) for r in results if r[1] and r[1].strip()]
+                    if lines:
+                        text = "\n".join(lines)
+                        avg_conf = round(sum(confs) / len(confs), 2)
+                        method = "OCR_RASTER"
+                    else:
+                        text = "[No legible text recognized by OCR on image document]"
+                        avg_conf = 0.0
+                        method = "OCR_RASTER"
+                except Exception as img_err:
+                    logger.error(f"OCR failed for image {file_path}: {img_err}", exc_info=True)
+                    text = f"[OCR processing failed for image: {str(img_err)}]"
+                    avg_conf = 0.0
+                    method = "OCR_FAILED"
+            else:
+                text = "[Image document detected; OCR engine unavailable in environment]"
+                avg_conf = 0.0
+                method = "OCR_UNAVAILABLE"
+
+            full_text = f"--- [Page 1 ({method})] ---\n{text}"
+            pages_metadata = [{
+                "page": 1,
+                "text": text,
+                "char_count": len(text),
+                "extraction_method": method,
+                "is_scanned": True,
+                "confidence": avg_conf,
+            }]
+            return full_text, 1, pages_metadata, avg_conf
 
     @staticmethod
+    def _create_field_entry(val: str, snippet: str, p: Dict[str, Any], default_conf: float = 0.90) -> Dict[str, Any]:
+        """Creates a standardized structured field dictionary with traceable provenance."""
+        conf = round(p.get("confidence", default_conf), 2)
+        return {
+            "value": val,
+            "page": p["page"],
+            "confidence": conf,
+            "source_snippet": snippet,
+            "corrected": False,
+            "is_ocr_derived": bool(p.get("is_scanned", False)),
+            "extraction_method": p.get("extraction_method", "DIGITAL_TEXT"),
+        }
+
+    @classmethod
     def extract_structured_fields(
-        text: str, document_type: str, pages_metadata: List[Dict[str, Any]]
+        cls, text: str, document_type: str, pages_metadata: List[Dict[str, Any]]
     ) -> Dict[str, Dict[str, Any]]:
         """
-        Extracts regulatory fields with page references and evidence spans based on document category.
-        Returns: {field_name: {value: ..., page: ..., confidence: ..., source_snippet: ...}}
+        Extracts regulatory fields with page references, evidence spans, and OCR provenance based on document category.
+        Returns: {field_name: {value, page, confidence, source_snippet, is_ocr_derived, extraction_method}}
         """
         extracted: Dict[str, Dict[str, Any]] = {}
 
@@ -90,57 +237,35 @@ class OCRExtractorService:
             for pat in inst_patterns:
                 res = search_span(pat, p["page"], p["text"])
                 if res and "institution_name" not in extracted:
-                    extracted["institution_name"] = {
-                        "value": res[0],
-                        "page": p["page"],
-                        "confidence": 0.92,
-                        "source_snippet": res[1],
-                        "corrected": False,
-                    }
+                    extracted["institution_name"] = cls._create_field_entry(res[0], res[1], p, 0.92)
                     break
 
         # 2. Document/Certificate Number
         num_patterns = [
-            r"(?:cert(?:ificate)?|noc|order|deed|letter|approval|file|reg(?:istration)?)\s*(?:no\.?|number|reference|ref\.?)\s*[:\-]?\s*([A-Za-z0-9\/\-_]{4,35})",
-            r"no\.\s*[:\-]?\s*([A-Za-z0-9\/\-_]{4,35})",
+            r"(?:cert(?:ificate)?|noc|order|deed|letter|approval|file|reg(?:istration)?)\s*(?:no\.?|na\.?|number|reference|ref\.?)\s*[:\-]?\s*([A-Za-z0-9\/\-_']{4,35})",
+            r"(?:no|na)\.\s*[:\-]?\s*([A-Za-z0-9\/\-_']{4,35})",
         ]
         for p in pages_metadata:
             for pat in num_patterns:
                 res = search_span(pat, p["page"], p["text"])
                 if res and "certificate_number" not in extracted:
-                    extracted["certificate_number"] = {
-                        "value": res[0],
-                        "page": p["page"],
-                        "confidence": 0.89,
-                        "source_snippet": res[1],
-                        "corrected": False,
-                    }
+                    extracted["certificate_number"] = cls._create_field_entry(res[0].replace("'", "/"), res[1], p, 0.89)
                     break
 
         # 3. Dates (Issue Date & Expiry / Valid Until)
-        date_pattern = r"(?:dated?|date\s+of\s+issue|issued\s+on)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4})"
-        expiry_pattern = r"(?:valid\s+(?:up\s*to|until|till)|expiry\s+date)\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4})"
+        date_pattern = r"(?:dated?|date\s+of\s+issue|issued\s+on)\s*[:\-]?\s*(\d{1,2}[\/\-\.,]\d{1,2}[\/\-\.,]\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4})"
+        expiry_pattern = r"(?:valid\s+(?:up\s*to|until|till)|expiry\s+date)\s*[:\-]?\s*(\d{1,2}[\/\-\.,]\d{1,2}[\/\-\.,]\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4})"
 
         for p in pages_metadata:
             res_date = search_span(date_pattern, p["page"], p["text"])
             if res_date and "issue_date" not in extracted:
-                extracted["issue_date"] = {
-                    "value": res_date[0],
-                    "page": p["page"],
-                    "confidence": 0.91,
-                    "source_snippet": res_date[1],
-                    "corrected": False,
-                }
+                norm_date = res_date[0].replace(",", "/")
+                extracted["issue_date"] = cls._create_field_entry(norm_date, res_date[1], p, 0.91)
 
             res_exp = search_span(expiry_pattern, p["page"], p["text"])
             if res_exp and "valid_until" not in extracted:
-                extracted["valid_until"] = {
-                    "value": res_exp[0],
-                    "page": p["page"],
-                    "confidence": 0.94,
-                    "source_snippet": res_exp[1],
-                    "corrected": False,
-                }
+                norm_exp = res_exp[0].replace(",", "/")
+                extracted["valid_until"] = cls._create_field_entry(norm_exp, res_exp[1], p, 0.94)
 
         # 4. Issuing Authority
         auth_patterns = [
@@ -151,13 +276,7 @@ class OCRExtractorService:
             for pat in auth_patterns:
                 res = search_span(pat, p["page"], p["text"])
                 if res and "issuing_authority" not in extracted:
-                    extracted["issuing_authority"] = {
-                        "value": res[0],
-                        "page": p["page"],
-                        "confidence": 0.88,
-                        "source_snippet": res[1],
-                        "corrected": False,
-                    }
+                    extracted["issuing_authority"] = cls._create_field_entry(res[0], res[1], p, 0.88)
                     break
 
         # 5. Land Specific: Survey No, Land Area, Unit (Exclude Satellite Imagery)
@@ -172,31 +291,13 @@ class OCRExtractorService:
                 for pat in survey_patterns:
                     res = search_span(pat, p["page"], p["text"])
                     if res and "survey_number" not in extracted:
-                        extracted["survey_number"] = {
-                            "value": res[0],
-                            "page": p["page"],
-                            "confidence": 0.93,
-                            "source_snippet": res[1],
-                            "corrected": False,
-                        }
+                        extracted["survey_number"] = cls._create_field_entry(res[0], res[1], p, 0.93)
                         break
 
                 match_area = re.search(area_patterns[0], p["text"], re.IGNORECASE)
                 if match_area and "land_area" not in extracted:
-                    extracted["land_area"] = {
-                        "value": match_area.group(1).strip(),
-                        "page": p["page"],
-                        "confidence": 0.95,
-                        "source_snippet": match_area.group(0),
-                        "corrected": False,
-                    }
-                    extracted["land_area_unit"] = {
-                        "value": match_area.group(2).strip(),
-                        "page": p["page"],
-                        "confidence": 0.95,
-                        "source_snippet": match_area.group(0),
-                        "corrected": False,
-                    }
+                    extracted["land_area"] = cls._create_field_entry(match_area.group(1).strip(), match_area.group(0), p, 0.95)
+                    extracted["land_area_unit"] = cls._create_field_entry(match_area.group(2).strip(), match_area.group(0), p, 0.95)
 
         # 6. Satellite Map of Land (Geo Coordinates & Entrance)
         if "satellite" in document_type.lower() or "map" in document_type.lower():
@@ -212,24 +313,12 @@ class OCRExtractorService:
                 for pat in lat_patterns:
                     res = search_span(pat, p["page"], p["text"])
                     if res and "latitude" not in extracted:
-                        extracted["latitude"] = {
-                            "value": res[0],
-                            "page": p["page"],
-                            "confidence": 0.92,
-                            "source_snippet": res[1],
-                            "corrected": False,
-                        }
+                        extracted["latitude"] = cls._create_field_entry(res[0], res[1], p, 0.92)
                         break
                 for pat in lon_patterns:
                     res = search_span(pat, p["page"], p["text"])
                     if res and "longitude" not in extracted:
-                        extracted["longitude"] = {
-                            "value": res[0],
-                            "page": p["page"],
-                            "confidence": 0.92,
-                            "source_snippet": res[1],
-                            "corrected": False,
-                        }
+                        extracted["longitude"] = cls._create_field_entry(res[0], res[1], p, 0.92)
                         break
 
         # 7. Affidavit 2 Specific: Stamp Duty, Sworn Authority, Signatory
@@ -240,31 +329,13 @@ class OCRExtractorService:
             for p in pages_metadata:
                 res_stamp = search_span(stamp_pat, p["page"], p["text"])
                 if res_stamp and "stamp_duty_amount" not in extracted:
-                    extracted["stamp_duty_amount"] = {
-                        "value": res_stamp[0],
-                        "page": p["page"],
-                        "confidence": 0.91,
-                        "source_snippet": res_stamp[1],
-                        "corrected": False,
-                    }
+                    extracted["stamp_duty_amount"] = cls._create_field_entry(res_stamp[0], res_stamp[1], p, 0.91)
                 res_sworn = search_span(sworn_pat, p["page"], p["text"])
                 if res_sworn and "sworn_before" not in extracted:
-                    extracted["sworn_before"] = {
-                        "value": res_sworn[0],
-                        "page": p["page"],
-                        "confidence": 0.89,
-                        "source_snippet": res_sworn[1],
-                        "corrected": False,
-                    }
+                    extracted["sworn_before"] = cls._create_field_entry(res_sworn[0], res_sworn[1], p, 0.89)
                 res_desig = search_span(desig_pat, p["page"], p["text"])
                 if res_desig and "signatory_designation" not in extracted:
-                    extracted["signatory_designation"] = {
-                        "value": res_desig[0],
-                        "page": p["page"],
-                        "confidence": 0.90,
-                        "source_snippet": res_desig[1],
-                        "corrected": False,
-                    }
+                    extracted["signatory_designation"] = cls._create_field_entry(res_desig[0], res_desig[1], p, 0.90)
 
         # 8. Structural Stability: Engineer details & building age
         if "structural" in document_type.lower() or "stability" in document_type.lower():
@@ -273,22 +344,10 @@ class OCRExtractorService:
             for p in pages_metadata:
                 res_eng = search_span(eng_pat, p["page"], p["text"])
                 if res_eng and "structural_engineer_name" not in extracted:
-                    extracted["structural_engineer_name"] = {
-                        "value": res_eng[0],
-                        "page": p["page"],
-                        "confidence": 0.90,
-                        "source_snippet": res_eng[1],
-                        "corrected": False,
-                    }
+                    extracted["structural_engineer_name"] = cls._create_field_entry(res_eng[0], res_eng[1], p, 0.90)
                 res_age = search_span(age_pat, p["page"], p["text"])
                 if res_age and "building_age_years" not in extracted:
-                    extracted["building_age_years"] = {
-                        "value": res_age[0],
-                        "page": p["page"],
-                        "confidence": 0.92,
-                        "source_snippet": res_age[1],
-                        "corrected": False,
-                    }
+                    extracted["building_age_years"] = cls._create_field_entry(res_age[0], res_age[1], p, 0.92)
 
         # 9. Audited Accounts: Financial Year & CA Membership
         if "audit" in document_type.lower() or "account" in document_type.lower():
@@ -297,22 +356,10 @@ class OCRExtractorService:
             for p in pages_metadata:
                 res_fy = search_span(fy_pat, p["page"], p["text"])
                 if res_fy and "financial_year" not in extracted:
-                    extracted["financial_year"] = {
-                        "value": res_fy[0],
-                        "page": p["page"],
-                        "confidence": 0.93,
-                        "source_snippet": res_fy[1],
-                        "corrected": False,
-                    }
+                    extracted["financial_year"] = cls._create_field_entry(res_fy[0], res_fy[1], p, 0.93)
                 res_ca = search_span(ca_pat, p["page"], p["text"])
                 if res_ca and "ca_membership_number" not in extracted:
-                    extracted["ca_membership_number"] = {
-                        "value": res_ca[0],
-                        "page": p["page"],
-                        "confidence": 0.92,
-                        "source_snippet": res_ca[1],
-                        "corrected": False,
-                    }
+                    extracted["ca_membership_number"] = cls._create_field_entry(res_ca[0], res_ca[1], p, 0.92)
 
         # 10. Building / Instructional Area
         if "building" in document_type.lower() or "architect" in document_type.lower():
@@ -320,13 +367,7 @@ class OCRExtractorService:
             for p in pages_metadata:
                 res_bld = search_span(built_up_pattern, p["page"], p["text"])
                 if res_bld and "built_up_area_sqm" not in extracted:
-                    extracted["built_up_area_sqm"] = {
-                        "value": res_bld[0],
-                        "page": p["page"],
-                        "confidence": 0.90,
-                        "source_snippet": res_bld[1],
-                        "corrected": False,
-                    }
+                    extracted["built_up_area_sqm"] = cls._create_field_entry(res_bld[0], res_bld[1], p, 0.90)
 
         # 11. Format 3 Resolution & Governance
         if "resolution" in document_type.lower() or "format 3" in document_type.lower():
@@ -334,13 +375,7 @@ class OCRExtractorService:
             for p in pages_metadata:
                 res_r = search_span(res_num_pat, p["page"], p["text"])
                 if res_r and "resolution_number" not in extracted:
-                    extracted["resolution_number"] = {
-                        "value": res_r[0],
-                        "page": p["page"],
-                        "confidence": 0.91,
-                        "source_snippet": res_r[1],
-                        "corrected": False,
-                    }
+                    extracted["resolution_number"] = cls._create_field_entry(res_r[0], res_r[1], p, 0.91)
 
         # 12. Bank Certificate 3
         if "bank" in document_type.lower() or "certificate 3" in document_type.lower():
@@ -349,22 +384,10 @@ class OCRExtractorService:
             for p in pages_metadata:
                 res_fdr = search_span(fdr_pat, p["page"], p["text"])
                 if res_fdr and "fdr_account_number" not in extracted:
-                    extracted["fdr_account_number"] = {
-                        "value": res_fdr[0],
-                        "page": p["page"],
-                        "confidence": 0.92,
-                        "source_snippet": res_fdr[1],
-                        "corrected": False,
-                    }
+                    extracted["fdr_account_number"] = cls._create_field_entry(res_fdr[0], res_fdr[1], p, 0.92)
                 res_amt = search_span(amt_pat, p["page"], p["text"])
                 if res_amt and "deposit_amount" not in extracted:
-                    extracted["deposit_amount"] = {
-                        "value": res_amt[0],
-                        "page": p["page"],
-                        "confidence": 0.90,
-                        "source_snippet": res_amt[1],
-                        "corrected": False,
-                    }
+                    extracted["deposit_amount"] = cls._create_field_entry(res_amt[0], res_amt[1], p, 0.90)
 
         # 13. Proposed Site Details (Change of Site)
         if "proposed" in document_type.lower() or "format 2" in document_type.lower():
@@ -372,12 +395,6 @@ class OCRExtractorService:
             for p in pages_metadata:
                 res_addr = search_span(prop_addr_pat, p["page"], p["text"])
                 if res_addr and "proposed_site_address" not in extracted:
-                    extracted["proposed_site_address"] = {
-                        "value": res_addr[0],
-                        "page": p["page"],
-                        "confidence": 0.88,
-                        "source_snippet": res_addr[1],
-                        "corrected": False,
-                    }
+                    extracted["proposed_site_address"] = cls._create_field_entry(res_addr[0], res_addr[1], p, 0.88)
 
         return extracted

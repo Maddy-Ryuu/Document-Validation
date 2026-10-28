@@ -57,20 +57,34 @@ def process_document_sync(db: Session, document_id: str) -> Document:
             pages_metadata=pages_metadata
         )
 
+        # 4. Determine engine provenance and warnings
+        scanned_count = sum(1 for p in pages_metadata if p.get("is_scanned"))
+        ocr_failed = any(p.get("extraction_method") == "OCR_FAILED" for p in pages_metadata)
+        ocr_unavailable = any(p.get("extraction_method") == "OCR_UNAVAILABLE" for p in pages_metadata)
+
+        if scanned_count > 0 and (ocr_failed or ocr_unavailable):
+            engine_str = "PyMuPDF (Digital Text) + EasyOCR (Partial Failure)"
+        elif scanned_count > 0:
+            engine_str = "PyMuPDF (Digital Text) + EasyOCR (Raster)"
+        else:
+            engine_str = "PyMuPDF (Digital Vector Text)"
+
         warnings = []
-        if avg_conf < 0.60:
-            warnings.append("Low overall OCR confidence score; visual human inspection recommended.")
+        if ocr_failed or ocr_unavailable:
+            warnings.append("One or more scanned pages could not be processed by OCR; visual human inspection required.")
+        if scanned_count > 0 and avg_conf < 0.65:
+            warnings.append(f"Low OCR recognition confidence ({avg_conf:.0%}) on scanned pages; manual verification recommended.")
         if not structured_fields:
             warnings.append("No standard regulatory fields could be automatically matched in this document.")
 
-        # 4. Save DocumentExtraction
+        # 5. Save DocumentExtraction
         extraction = DocumentExtraction(
             document_id=doc.id,
             raw_text=raw_text,
             page_count=page_count,
             structured_fields=structured_fields,
             confidence_score=avg_conf,
-            extraction_engine="PyMuPDF + EasyOCR",
+            extraction_engine=engine_str,
             extraction_status="SUCCESS" if structured_fields else "PARTIAL",
             warnings=warnings,
         )
