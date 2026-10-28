@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from app.models.models import (
     Application,
     Institution,
+    InstitutionReferenceRecord,
     Document,
     Finding,
     RiskAssessment,
@@ -480,6 +481,56 @@ class InstitutionService:
                 "Duplicate institution conflict detected during transaction commit."
             ) from e
         return inst
+
+    @staticmethod
+    def delete_institution(
+        db: Session,
+        institution_id: str,
+        authorized_user: Optional[str] = None,
+        authorized_role: Optional[str] = None,
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Deletes an operational institution record after verifying eligibility:
+        1. Checks whether the ID belongs to an authoritative reference record (protected).
+        2. Checks whether linked applications exist (prevents deletion to avoid orphaned records).
+        3. Records an indelible AuditEvent with action='INSTITUTION_DELETE'.
+        4. Does NOT cascade delete applications, documents, or reference records.
+        """
+        # Guard: Check if id belongs to an authoritative reference record
+        ref_record = db.query(InstitutionReferenceRecord).filter(InstitutionReferenceRecord.id == institution_id).first()
+        if ref_record:
+            return False, "PROTECTED_REFERENCE_RECORD: Authoritative regulatory reference records cannot be deleted through the operational institution interface."
+
+        inst = db.query(Institution).filter(Institution.id == institution_id).first()
+        if not inst:
+            return False, "NOT_FOUND"
+
+        # Guard: Linked applications check
+        linked_apps_count = db.query(Application).filter(Application.institution_id == institution_id).count()
+        if linked_apps_count > 0:
+            return False, f"LINKED_RECORDS_EXIST: Cannot delete institution '{inst.name}' ({inst.institution_identifier}): {linked_apps_count} active application(s) exist. Applications and linked statutory documents must be resolved or deleted first to prevent orphaned records."
+
+        # Record indelible audit event
+        audit = AuditEvent(
+            entity_type="Institution",
+            entity_id=inst.id,
+            action="INSTITUTION_DELETE",
+            details={
+                "institution_identifier": inst.institution_identifier,
+                "name": inst.name,
+                "institution_type": inst.institution_type,
+                "state": inst.state,
+                "city": inst.city,
+                "authorized_by": authorized_user or "AICTE Administrator",
+                "authorized_role": authorized_role or "admin",
+                "timestamp": datetime.utcnow().isoformat(),
+                "retention_policy": "FORENSIC_AUDIT_LOG_PRESERVED",
+            },
+        )
+        db.add(audit)
+        db.delete(inst)
+        db.commit()
+        return True, None
 
 
 class DashboardService:

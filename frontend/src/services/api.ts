@@ -200,6 +200,11 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  deleteInstitution: (id: string) =>
+    request<{ success: boolean; message: string; deleted_institution_id: string }>(`/institutions/${id}`, {
+      method: "DELETE",
+    }),
+
   // Sidebar Modules APIs
   getAllDocuments: (params?: {
     page?: number;

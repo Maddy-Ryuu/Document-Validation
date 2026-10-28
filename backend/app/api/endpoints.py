@@ -198,6 +198,67 @@ def update_institution(institution_id: str, inst_in: InstitutionUpdate, db: Sess
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update institution: {str(e)}")
 
 
+@router.delete("/institutions/{institution_id}", tags=["Institutions"])
+def delete_institution(
+    institution_id: str,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Deletes an operational institution after verifying administrator privileges and confirming
+    that no linked applications or regulatory history exist.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to perform institution deletion",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = authorization[7:].strip()
+    payload = verify_access_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Enforce Administrator privilege
+    user_role = payload.get("role", "")
+    if user_role not in ("admin", "superadmin", "administrator"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrative privilege required. Only administrator accounts can delete institutions.",
+        )
+
+    user_label = payload.get("email", "System Administrator")
+    success, reason = InstitutionService.delete_institution(
+        db,
+        institution_id=institution_id,
+        authorized_user=user_label,
+        authorized_role=user_role,
+    )
+    if not success:
+        if reason == "NOT_FOUND":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Institution not found")
+        elif reason and reason.startswith("PROTECTED_REFERENCE_RECORD"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=reason,
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=reason or "Cannot delete institution with linked active records.",
+            )
+
+    return {
+        "success": True,
+        "message": "Institution deleted successfully and forensic audit record preserved.",
+        "deleted_institution_id": institution_id,
+    }
+
+
 # =========================================================================
 # PHASE 2: DOCUMENT PROCESSING & STORAGE APIS
 # =========================================================================
