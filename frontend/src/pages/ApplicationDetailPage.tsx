@@ -20,6 +20,7 @@ import {
   X,
   AlertTriangle,
   BookOpen,
+  Trash2,
 } from "lucide-react";
 import { api } from "../services/api";
 import {
@@ -52,6 +53,24 @@ export const ApplicationDetailPage: React.FC<ApplicationDetailPageProps> = ({
   const [riskReport, setRiskReport] = useState<RiskAssessmentReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [evaluating, setEvaluating] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteApplication = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.deleteApplication(applicationId);
+      setIsDeleteModalOpen(false);
+      onRefresh();
+      onBack();
+    } catch (err: any) {
+      setDeleteError(err.message || "Failed to delete application");
+    } finally {
+      setDeleting(false);
+    }
+  };
   const [evaluatingRisk, setEvaluatingRisk] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"compliance" | "risk" | "checklist" | "all_docs" | "findings">("compliance");
@@ -226,6 +245,15 @@ export const ApplicationDetailPage: React.FC<ApplicationDetailPageProps> = ({
           >
             <Upload className="w-3.5 h-3.5" />
             <span>Upload Document</span>
+          </button>
+
+          <button
+            onClick={() => setIsDeleteModalOpen(true)}
+            className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-red-300 text-red-700 hover:bg-red-50 text-xs font-semibold rounded-md shadow-xs transition-colors"
+            title="Delete Application Record"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-red-600" />
+            <span>Delete</span>
           </button>
         </div>
       </div>
@@ -1011,6 +1039,63 @@ export const ApplicationDetailPage: React.FC<ApplicationDetailPageProps> = ({
             handleOpenUploadForCategory(d.document_type, d.id);
           }}
         />
+      )}
+
+      {/* Delete Application Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-lg border border-border shadow-xl w-full max-w-md overflow-hidden">
+            <div className="p-4 border-b border-border flex items-center justify-between bg-red-50/50">
+              <div className="flex items-center space-x-2 text-red-800">
+                <AlertTriangle className="w-4 h-4 text-red-600" />
+                <h3 className="text-xs font-bold uppercase tracking-wider">Confirm Application Deletion</h3>
+              </div>
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="p-1 text-secondary-text hover:text-primary-text rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              {deleteError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                  {deleteError}
+                </div>
+              )}
+
+              <p className="text-secondary-text leading-relaxed">
+                Are you sure you want to delete application <strong className="text-primary-text">{app?.application_identifier}</strong>? This action will permanently remove the application record from active scrutiny.
+              </p>
+
+              <div className="p-3 bg-surface-muted rounded border border-border text-[11px] text-secondary-text space-y-1">
+                <span className="font-semibold text-primary-text block">Forensic Audit Retention:</span>
+                <span>An indelible forensic audit record will be logged with full deletion and document retention metadata.</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-surface-muted/60 border-t border-border flex justify-end space-x-2">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                disabled={deleting}
+                className="px-3.5 py-1.5 bg-white border border-border text-primary-text text-xs font-medium rounded hover:bg-surface"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteApplication}
+                disabled={deleting}
+                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded shadow-xs disabled:opacity-50 flex items-center space-x-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{deleting ? "Deleting..." : "Confirm Delete"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

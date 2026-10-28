@@ -431,3 +431,22 @@ export interface ReferenceMatchReport {
   latest_approval?: InstitutionApprovalHistoryReference | null;
   recommendation: "AUTO_VERIFIED" | "MANUAL_SCRUTINY_REQUIRED" | "REJECT_UNAUTHORIZED" | string;
 }
+
+
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
+}
+
+export interface LoginPayload {
+  email: string;
+  password: string;
+}

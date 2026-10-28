@@ -235,6 +235,51 @@ class ApplicationService:
         db.refresh(app)
         return app
 
+    @staticmethod
+    def delete_application(db: Session, application_id: str, authorized_user: Optional[str] = None) -> bool:
+        """
+        Deletes an application after preserving full forensic audit history and linked
+        document metadata according to the statutory retention policy.
+        """
+        app = db.query(Application).filter(Application.id == application_id).first()
+        if not app:
+            return False
+
+        # Gather linked documents summary for forensic retention
+        docs = db.query(Document).filter(Document.application_id == application_id).all()
+        retained_docs_summary = [
+            {
+                "id": d.id,
+                "document_type": d.document_type,
+                "filename": d.original_filename,
+                "sha256": d.sha256_hash,
+                "version": d.version,
+            }
+            for d in docs
+        ]
+
+        # Record indelible audit event
+        audit = AuditEvent(
+            entity_type="Application",
+            entity_id=application_id,
+            action="APPLICATION_DELETE",
+            details={
+                "application_identifier": app.application_identifier,
+                "institution_id": app.institution_id,
+                "institution_name": app.institution.name if app.institution else "Unknown",
+                "category": app.application_category,
+                "status": app.status,
+                "authorized_by": authorized_user or "AICTE Scrutiny Officer",
+                "retention_policy": "FORENSIC_AUDIT_LOG_PRESERVED",
+                "retained_documents_count": len(retained_docs_summary),
+                "retained_documents": retained_docs_summary,
+            },
+        )
+        db.add(audit)
+        db.delete(app)
+        db.commit()
+        return True
+
 
 class InstitutionService:
     @staticmethod

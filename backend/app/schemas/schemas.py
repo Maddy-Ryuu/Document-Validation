@@ -24,6 +24,24 @@ class UserResponse(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=1)
+
+
+class AuthUser(BaseModel):
+    id: str
+    name: str
+    email: str
+    role: str
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: AuthUser
+
+
 # Institution Schemas
 class InstitutionBase(BaseModel):
     institution_identifier: str = Field(..., min_length=2, max_length=100)

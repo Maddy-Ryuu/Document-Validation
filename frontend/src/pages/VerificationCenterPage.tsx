@@ -574,7 +574,7 @@ export const VerificationCenterPage: React.FC<VerificationCenterPageProps> = ({
       {/* INTEGRATED DUAL SCRUTINY DOSSIER PANEL (Phase 2 Cross-Verification + Docs) */}
       {/* ========================================================================= */}
       {inspectedAppId && inspectedAppMeta && (
-        <div className="bg-white rounded-lg border-2 border-primary-orange/40 shadow-md p-6 space-y-6 animate-in fade-in duration-200">
+        <div id="cross-verification-dossier" className="bg-white rounded-lg border-2 border-primary-orange/40 shadow-md p-6 space-y-6 animate-in fade-in duration-200">
           {/* Inspection Panel Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border">
             <div>

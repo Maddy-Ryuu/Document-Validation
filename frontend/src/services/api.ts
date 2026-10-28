@@ -19,6 +19,9 @@ import {
   SystemSettings,
   InstitutionReferenceRecord,
   ReferenceMatchReport,
+  AuthUser,
+  AuthResponse,
+  LoginPayload,
 } from "../types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string) || "http://localhost:8000/api";
@@ -26,10 +29,14 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL as string) || "http://localh
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE}${endpoint}`;
   try {
+    const token = typeof window !== "undefined" ? localStorage.getItem("aicte_auth_token") : null;
+    const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
     const res = await fetch(url, {
       ...options,
       headers: {
         ...(options?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+        ...authHeaders,
         ...options?.headers,
       },
     });
@@ -286,6 +293,47 @@ export const api = {
     if (params?.search) query.append("search", params.search);
     return request<InstitutionReferenceRecord[]>(`/reference-data/institutions?${query.toString()}`);
   },
+
+  // Authentication APIs
+  login: async (payload: LoginPayload): Promise<AuthResponse> => {
+    const res = await request<AuthResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    if (res.access_token) {
+      localStorage.setItem("aicte_auth_token", res.access_token);
+      localStorage.setItem("aicte_auth_user", JSON.stringify(res.user));
+    }
+    return res;
+  },
+
+  logout: async (): Promise<void> => {
+    try {
+      await request<{ message: string }>("/auth/logout", { method: "POST" });
+    } catch {
+      // Ignore network errors on logout
+    } finally {
+      localStorage.removeItem("aicte_auth_token");
+      localStorage.removeItem("aicte_auth_user");
+    }
+  },
+
+  getCurrentUser: async (): Promise<AuthUser | null> => {
+    const token = localStorage.getItem("aicte_auth_token");
+    if (!token) return null;
+    try {
+      return await request<AuthUser>("/auth/me");
+    } catch {
+      localStorage.removeItem("aicte_auth_token");
+      localStorage.removeItem("aicte_auth_user");
+      return null;
+    }
+  },
+
+  deleteApplication: (id: string) =>
+    request<{ success: boolean; message: string; deleted_application_id: string }>(`/applications/${id}`, {
+      method: "DELETE",
+    }),
 
   getReferenceInstitutionById: (refId: string) =>
     request<InstitutionReferenceRecord>(`/reference-data/institutions/${refId}`),

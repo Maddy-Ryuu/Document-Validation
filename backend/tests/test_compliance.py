@@ -30,7 +30,7 @@ def create_sample_pdf(text: str) -> bytes:
     return b
 
 
-def setup_test_application(inst_name="Apex Institute of Technology & Advanced Studies"):
+def setup_test_application(inst_name="Apex Institute of Technology & Advanced Studies", category="Extension of Approval (EoA)"):
     unique_id = uuid.uuid4().hex[:6].upper()
     inst_res = client.post("/api/institutions", json={
         "institution_identifier": f"INST-{unique_id}",
@@ -52,7 +52,7 @@ def setup_test_application(inst_name="Apex Institute of Technology & Advanced St
 
     app_res = client.post("/api/applications", json={
         "institution_id": inst_id,
-        "application_category": "Extension of Approval (EoA)",
+        "application_category": category,
         "academic_year": "2026-2027",
     })
     return app_res.json()["id"]
@@ -152,7 +152,7 @@ def test_cross_document_identity_mismatch_rule():
 
 
 def test_land_area_norm_evaluation():
-    app_id = setup_test_application()
+    app_id = setup_test_application(category="New Technical Institute")
     # Land deed with 5.25 Acres (satisfies >= 2.5 Acres threshold)
     text = (
         "REGISTERED LAND DEED\n"
@@ -183,13 +183,34 @@ def test_land_area_norm_evaluation():
 
 
 def test_pending_confirmation_rule_handling():
-    app_id = setup_test_application()
+    # Use non-EoA category so pending confirmation rule is included in evaluation
+    app_id = setup_test_application(category="New Technical Institute")
     eval_res = client.post(f"/api/applications/{app_id}/compliance/evaluate")
     data = eval_res.json()
 
     pending_rule = next(r for r in data["rule_evaluations"] if r["rule_code"] == "APH-RULE-PENDING-SATELLITE-GIS")
     assert pending_rule["result"] == "NOT_APPLICABLE"
     assert pending_rule.get("is_pending_confirmation") is True
+
+
+def test_eoa_omits_not_applicable_rules():
+    """Confirms that for Extension of Approval (EoA), NOT_APPLICABLE checks are omitted from execution and breakdown."""
+    app_id = setup_test_application(category="Extension of Approval (EoA)")
+    eval_res = client.post(f"/api/applications/{app_id}/compliance/evaluate")
+    data = eval_res.json()
+    rule_codes = [r["rule_code"] for r in data["rule_evaluations"]]
+
+    # Non-applicable rules are omitted from EoA breakdown
+    assert "APH-RULE-PENDING-SATELLITE-GIS" not in rule_codes
+    assert "APH-RULE-NEW-INST-TRUST" not in rule_codes
+    assert "APH-RULE-NEW-INST-BANK" not in rule_codes
+    assert "APH-RULE-INTAKE-AFFILIATION" not in rule_codes
+    assert "APH-RULE-NRI-FN-SUBTYPE" not in rule_codes
+    assert "APH-RULE-SITE-LOCATION-DISTINCTION" not in rule_codes
+
+    # No NOT_APPLICABLE rules present in EoA breakdown
+    for r in data["rule_evaluations"]:
+        assert r["result"] != "NOT_APPLICABLE"
 
 
 # =========================================================================
@@ -219,14 +240,13 @@ def test_regression_no_documents_uploaded():
     dup_rule = next(r for r in data["rule_evaluations"] if r["rule_code"] == "APH-RULE-DUP-HASH")
     assert dup_rule["result"] == "NOT_EVALUATED"
 
-    # Land norm should be NOT_EVALUATED
-    land_rule = next(r for r in data["rule_evaluations"] if r["rule_code"] == "APH-RULE-LAND-NORM")
-    assert land_rule["result"] == "NOT_EVALUATED"
+    # For Extension of Approval (EoA), Land norm is omitted as NOT_APPLICABLE
+    assert not any(r["rule_code"] == "APH-RULE-LAND-NORM" for r in data["rule_evaluations"])
 
 
 def test_regression_synthetic_metadata_summaries_unverified():
     """Synthetic metadata summaries must NOT pass validity or land norm as authentic; they must return NEEDS_REVIEW."""
-    app_id = setup_test_application()
+    app_id = setup_test_application(category="New Technical Institute")
 
     # Upload synthetic fire NOC summary
     synth_fire = (

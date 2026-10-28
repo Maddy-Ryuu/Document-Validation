@@ -1,4 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { LoginPage } from "./pages/LoginPage";
+import { AuthUser } from "./types";
+import { api } from "./services/api";
+import { RotateCw } from "lucide-react";
 import { Sidebar, NavItemKey } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { Overview } from "./pages/Overview";
@@ -16,6 +20,40 @@ import { NewApplicationModal } from "./components/NewApplicationModal";
 import { NewInstitutionModal } from "./components/NewInstitutionModal";
 
 export function App() {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    try {
+      const saved = localStorage.getItem("aicte_auth_user");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    try {
+      const user = await api.getCurrentUser();
+      setCurrentUser(user);
+    } catch {
+      setCurrentUser(null);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLoginSuccess = (user: AuthUser) => {
+    setCurrentUser(user);
+  };
+
+  const handleLogout = async () => {
+    await api.logout();
+    setCurrentUser(null);
+  };
+
   const [currentTab, setCurrentTab] = useState<NavItemKey>("overview");
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
 
@@ -189,6 +227,19 @@ export function App() {
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-surface-muted flex flex-col items-center justify-center space-y-3">
+        <RotateCw className="w-8 h-8 animate-spin text-primary-orange" />
+        <span className="text-xs text-secondary-text font-medium">Verifying AICTE regulatory credentials...</span>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="flex h-screen bg-white overflow-hidden text-primary-text">
       {/* Persistent Left Sidebar */}
@@ -202,7 +253,7 @@ export function App() {
 
       {/* Main Workspace */}
       <div className="flex-1 flex flex-col h-screen overflow-y-auto bg-background">
-        <Header title={getHeaderTitle()} subtitle={getHeaderSubtitle()} />
+        <Header title={getHeaderTitle()} subtitle={getHeaderSubtitle()} user={currentUser} onLogout={handleLogout} />
 
         <main className="flex-1 pb-16">{renderContent()}</main>
       </div>

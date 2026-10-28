@@ -8,6 +8,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Trash2,
+  AlertTriangle,
+  X,
+  CheckCircle2,
 } from "lucide-react";
 import { api } from "../services/api";
 import { ApplicationListItem } from "../types";
@@ -35,6 +39,28 @@ export const ApplicationsPage: React.FC<ApplicationsPageProps> = ({
   const [academicYear, setAcademicYear] = useState("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Deletion modal state
+  const [appToDelete, setAppToDelete] = useState<ApplicationListItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+
+  const confirmDelete = async () => {
+    if (!appToDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.deleteApplication(appToDelete.id);
+      setActionFeedback(`Application ${appToDelete.application_identifier} deleted successfully. Forensic audit record preserved.`);
+      setAppToDelete(null);
+      fetchApps();
+    } catch (err: any) {
+      setDeleteError(err.message || "Failed to delete application");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     fetchApps();
@@ -87,6 +113,19 @@ export const ApplicationsPage: React.FC<ApplicationsPageProps> = ({
           <span>New Application</span>
         </button>
       </div>
+
+      {/* Action Feedback Banner */}
+      {actionFeedback && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-md text-emerald-800 text-xs flex items-center justify-between animate-in fade-in">
+          <div className="flex items-center space-x-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <span>{actionFeedback}</span>
+          </div>
+          <button onClick={() => setActionFeedback(null)} className="p-0.5 hover:bg-emerald-100 rounded">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Filter / Search Bar */}
       <div className="bg-white p-4 rounded-lg border border-border shadow-xs flex flex-wrap items-center justify-between gap-3">
@@ -230,15 +269,27 @@ export const ApplicationsPage: React.FC<ApplicationsPageProps> = ({
                       <StatusBadge status={app.status} />
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectApplication(app.id);
-                        }}
-                        className="text-primary-orange hover:text-primary-orange-hover font-medium text-[11px]"
-                      >
-                        Inspect
-                      </button>
+                      <div className="flex items-center justify-end space-x-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectApplication(app.id);
+                          }}
+                          className="text-primary-orange hover:text-primary-orange-hover font-medium text-[11px]"
+                        >
+                          Inspect
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAppToDelete(app);
+                          }}
+                          title="Delete Application"
+                          className="p-1 text-secondary-text hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -272,6 +323,63 @@ export const ApplicationsPage: React.FC<ApplicationsPageProps> = ({
           </div>
         )}
       </div>
+
+      {/* Deletion Confirmation Modal */}
+      {appToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-lg border border-border shadow-xl w-full max-w-md overflow-hidden">
+            <div className="p-4 border-b border-border flex items-center justify-between bg-red-50/50">
+              <div className="flex items-center space-x-2 text-red-800">
+                <AlertTriangle className="w-4 h-4 text-red-600" />
+                <h3 className="text-xs font-bold uppercase tracking-wider">Confirm Application Deletion</h3>
+              </div>
+              <button
+                onClick={() => setAppToDelete(null)}
+                className="p-1 text-secondary-text hover:text-primary-text rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              {deleteError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                  {deleteError}
+                </div>
+              )}
+
+              <p className="text-secondary-text leading-relaxed">
+                Are you sure you want to delete application <strong className="text-primary-text">{appToDelete.application_identifier}</strong> for <strong className="text-primary-text">{appToDelete.institution_name}</strong>?
+              </p>
+
+              <div className="p-3 bg-surface-muted rounded border border-border text-[11px] text-secondary-text space-y-1">
+                <span className="font-semibold text-primary-text block">Statutory Audit Retention:</span>
+                <span>An indelible forensic audit record will be logged with full deletion metadata. Linked document records are archived according to AICTE compliance retention rules.</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-surface-muted/60 border-t border-border flex justify-end space-x-2">
+              <button
+                type="button"
+                onClick={() => setAppToDelete(null)}
+                disabled={deleting}
+                className="px-3.5 py-1.5 bg-white border border-border text-primary-text text-xs font-medium rounded hover:bg-surface"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded shadow-xs disabled:opacity-50 flex items-center space-x-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{deleting ? "Deleting..." : "Confirm Delete"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

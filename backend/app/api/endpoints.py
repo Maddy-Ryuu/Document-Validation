@@ -1,6 +1,9 @@
+from app.core.auth import verify_password, create_access_token, verify_access_token
+from app.models.models import User
+from app.schemas.schemas import LoginRequest, AuthResponse, AuthUser
 import os
 import math
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Header, status, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -930,3 +933,142 @@ def trigger_application_reference_match(application_id: str, db: Session = Depen
         return report
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+# =========================================================================
+# AUTHENTICATION APIS
+# =========================================================================
+
+BOOTSTRAP_OFFICERS = {
+    "officer@aicte.gov.in": {
+        "id": "aicte-officer-01",
+        "name": "AICTE Scrutiny Officer",
+        "email": "officer@aicte.gov.in",
+        "role": "compliance_officer",
+        "password": "aicte2026!",
+    },
+    "reviewer@aicte.gov.in": {
+        "id": "aicte-reviewer-01",
+        "name": "Senior Reviewer",
+        "email": "reviewer@aicte.gov.in",
+        "role": "reviewer",
+        "password": "reviewer2026!",
+    },
+    "admin@aicte.gov.in": {
+        "id": "aicte-admin-01",
+        "name": "System Administrator",
+        "email": "admin@aicte.gov.in",
+        "role": "admin",
+        "password": "admin2026!",
+    },
+}
+
+
+def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+    """Dependency that extracts and validates the bearer token."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or malformed Authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = authorization[7:].strip()
+    payload = verify_access_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return payload
+
+
+@router.post("/auth/login", response_model=AuthResponse, tags=["Authentication"])
+def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    """Authenticates users against database User table or designated bootstrap officer credentials."""
+    email = payload.email.strip().lower()
+    plain_pw = payload.password
+
+    # 1. Check persistent User table
+    db_user = db.query(User).filter(func.lower(User.email) == email).first()
+    if db_user and db_user.is_active:
+        if verify_password(plain_pw, db_user.password_hash):
+            user_data = {
+                "id": db_user.id,
+                "name": db_user.name,
+                "email": db_user.email,
+                "role": db_user.role,
+            }
+            token = create_access_token(user_data)
+            return {"access_token": token, "token_type": "bearer", "user": user_data}
+
+    # 2. Check designated bootstrap officer credentials
+    if email in BOOTSTRAP_OFFICERS:
+        officer = BOOTSTRAP_OFFICERS[email]
+        if plain_pw == officer["password"]:
+            user_data = {
+                "id": officer["id"],
+                "name": officer["name"],
+                "email": officer["email"],
+                "role": officer["role"],
+            }
+            token = create_access_token(user_data)
+            return {"access_token": token, "token_type": "bearer", "user": user_data}
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid official email or password. Please verify your credentials.",
+    )
+
+
+@router.get("/auth/me", response_model=AuthUser, tags=["Authentication"])
+def get_auth_me(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Returns profile for currently authenticated bearer token."""
+    return {
+        "id": current_user["id"],
+        "name": current_user["name"],
+        "email": current_user["email"],
+        "role": current_user["role"],
+    }
+
+
+@router.post("/auth/logout", tags=["Authentication"])
+def logout(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Logs out current user session."""
+    return {"message": "Logged out successfully", "user_id": current_user.get("id")}
+
+
+@router.delete("/applications/{application_id}", tags=["Applications"])
+def delete_application(
+    application_id: str,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Deletes an application after verifying authorization and preserving full forensic audit history.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to perform application deletion",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = authorization[7:].strip()
+    payload = verify_access_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_label = payload.get("email", "Authorized Officer")
+    deleted = ApplicationService.delete_application(db, application_id, authorized_user=user_label)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    return {
+        "success": True,
+        "message": "Application deleted successfully and forensic audit record preserved.",
+        "deleted_application_id": application_id,
+    }
