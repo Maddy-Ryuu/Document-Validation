@@ -69,11 +69,15 @@ router = APIRouter()
 def health_check(db: Session = Depends(get_db)):
     try:
         db.execute(__import__('sqlalchemy').text("SELECT 1"))
+        from app.services.ocr import check_ocr_readiness
+        ocr_ready, ocr_status = check_ocr_readiness()
         return {
             "status": "healthy",
             "database": "connected",
             "service": "AICTE Application Validation Backend",
             "phase": 2,
+            "ocr_ready": ocr_ready,
+            "ocr_status": ocr_status,
         }
     except Exception as e:
         raise HTTPException(

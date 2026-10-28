@@ -496,3 +496,85 @@ def test_15_direct_image_ocr_recognition(tmp_path):
     assert pages_meta[0]["is_scanned"] is True
     assert "registered for regulatory inspection" not in full_text
     assert avg_conf > 0.40
+
+
+# ===========================================================================
+# 16. MODEL PATH AND READINESS VERIFICATION
+# ===========================================================================
+
+def test_16_ocr_model_path_and_readiness_verification():
+    """16. Verifies model path resolves to storage/models/easyocr and check_ocr_readiness verifies weights."""
+    from app.services.ocr import get_ocr_model_dir, check_ocr_readiness
+    model_dir = get_ocr_model_dir()
+    assert model_dir.endswith(os.path.join("storage", "models", "easyocr"))
+    assert os.path.isdir(model_dir)
+
+    ready, msg = check_ocr_readiness()
+    assert ready is True
+    assert "verified ready" in msg
+
+
+# ===========================================================================
+# 17. MISSING MODEL WEIGHTS FAIL SAFELY WITHOUT REQUEST-TIME DOWNLOAD
+# ===========================================================================
+
+def test_17_ocr_missing_models_fail_safely_without_download(monkeypatch, tmp_path):
+    """17. Verifies that missing model weights return False and do not attempt network download."""
+    from app.services import ocr
+    empty_dir = tmp_path / "empty_models"
+    empty_dir.mkdir()
+
+    monkeypatch.setattr(ocr, "get_ocr_model_dir", lambda: str(empty_dir))
+    ready, msg = ocr.check_ocr_readiness()
+    assert ready is False
+    assert "Detection model weights missing" in msg
+
+    # Reset singleton and test get_ocr_reader
+    monkeypatch.setattr(ocr, "_ocr_initialized", False)
+    monkeypatch.setattr(ocr, "_ocr_reader", None)
+    reader = ocr.get_ocr_reader()
+    assert reader is None
+    assert ocr._ocr_initialized is True
+
+
+# ===========================================================================
+# 18. HEALTH ENDPOINT REPORTS OCR STATUS WITHOUT COMPROMISING GENERAL HEALTH
+# ===========================================================================
+
+def test_18_health_endpoint_reports_ocr_readiness():
+    """18. The /api/health endpoint includes ocr_ready and ocr_status without blocking status 200."""
+    res = client.get("/api/health")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "healthy"
+    assert data["database"] == "connected"
+    assert "ocr_ready" in data
+    assert data["ocr_ready"] is True
+    assert "ocr_status" in data
+
+
+# ===========================================================================
+# 19. MODEL PROVISIONER VALIDATION
+# ===========================================================================
+
+def test_19_model_provisioner_validation(tmp_path):
+    """19. Tests provision_models module verification functions and threshold checks."""
+    import sys
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    from provision_models import verify_provisioned_models, get_model_directory
+
+    model_dir = get_model_directory()
+    verified, msg = verify_provisioned_models(model_dir)
+    assert verified is True
+    assert "Verified detection model" in msg
+
+    # Test corrupted/small file detection
+    corrupt_dir = tmp_path / "corrupt_models"
+    corrupt_dir.mkdir()
+    (corrupt_dir / "craft_mlt_25k.pth").write_bytes(b"too small")
+    (corrupt_dir / "english_g2.pth").write_bytes(b"too small")
+
+    verified_corrupt, corrupt_msg = verify_provisioned_models(str(corrupt_dir))
+    assert verified_corrupt is False
+    assert "incomplete" in corrupt_msg
+

@@ -15,34 +15,69 @@ _ocr_reader = None
 _ocr_initialized = False
 
 
+def get_ocr_model_dir() -> str:
+    """Returns absolute path to the local model storage directory."""
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(base_dir, "storage", "models", "easyocr")
+
+
+def check_ocr_readiness() -> Tuple[bool, str]:
+    """
+    Checks if EasyOCR package and required model weights are provisioned and accessible.
+    Strictly read-only; never triggers network requests or model downloads.
+    """
+    try:
+        import easyocr  # noqa: F401
+    except ImportError:
+        return False, "EasyOCR package not installed in environment"
+
+    model_dir = get_ocr_model_dir()
+    craft_path = os.path.join(model_dir, "craft_mlt_25k.pth")
+    recog_path = os.path.join(model_dir, "english_g2.pth")
+
+    if not os.path.isfile(craft_path):
+        return False, f"Detection model weights missing: {craft_path}"
+    if not os.path.isfile(recog_path):
+        return False, f"Recognition model weights missing: {recog_path}"
+    if os.path.getsize(craft_path) < 1000000:
+        return False, f"Detection model weights corrupted or incomplete ({os.path.getsize(craft_path)} bytes)"
+    if os.path.getsize(recog_path) < 1000000:
+        return False, f"Recognition model weights corrupted or incomplete ({os.path.getsize(recog_path)} bytes)"
+
+    return True, "EasyOCR and pre-provisioned model weights verified ready"
+
+
 def get_ocr_reader() -> Optional[Any]:
     """
     Lazy singleton initialization of EasyOCR engine configured for CPU execution
-    with local model storage to prevent unprivileged path creation and runtime downloads.
+    with local model storage.
+    Strictly forbids request-time model downloads: models must be pre-provisioned.
     """
     global _ocr_reader, _ocr_initialized
     if _ocr_initialized:
         return _ocr_reader
     try:
+        ready, reason = check_ocr_readiness()
+        if not ready:
+            logger.warning(f"EasyOCR reader unavailable: {reason}. Request-time model download is disabled.")
+            _ocr_reader = None
+            _ocr_initialized = True
+            return None
+
         import easyocr
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        model_dir = os.path.join(base_dir, "storage", "models", "easyocr")
+        model_dir = get_ocr_model_dir()
         user_net_dir = os.path.join(model_dir, "user_network")
         os.makedirs(user_net_dir, exist_ok=True)
-
-        download = True
-        if os.path.isfile(os.path.join(model_dir, "craft_mlt_25k.pth")) and os.path.isfile(os.path.join(model_dir, "english_g2.pth")):
-            download = False
 
         _ocr_reader = easyocr.Reader(
             ["en"],
             gpu=False,
             model_storage_directory=model_dir,
             user_network_directory=user_net_dir,
-            download_enabled=download,
+            download_enabled=False,
             verbose=False,
         )
-        logger.info("EasyOCR engine successfully initialized.")
+        logger.info("EasyOCR engine successfully initialized from pre-provisioned local models.")
     except Exception as e:
         logger.warning(f"EasyOCR reader initialization unavailable or failed: {e}")
         _ocr_reader = None
