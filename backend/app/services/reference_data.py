@@ -25,250 +25,304 @@ from app.models.models import (
 logger = logging.getLogger("reference_data_service")
 
 OFFICIAL_SOURCE = "AICTE Central Regulatory Registry (APH 2024-2027)"
+DEMO_SOURCE = "Synthetic Demonstration Benchmark (AICTE Approval Process Handbook Reference Data)"
+DEMO_DOC_REF = "DEMO-SYNTHETIC-FIXTURE-NOT-OFFICIAL"
 
 
 class ReferenceDataService:
     @staticmethod
     def seed_authoritative_benchmarks(db: Session) -> int:
         """
-        Populates authoritative official reference records for benchmark institutions.
+        Populates synthetic demonstration benchmark records for the three reference tables.
         Maintains distinct provenance, sanctioned intakes, accreditation statuses,
-        and continuous approval histories. Idempotent.
+        and continuous approval histories.
+        
+        Strict Safety Invariants:
+        1. Every demonstration institution and child record is labeled explicitly as synthetic.
+        2. is_official is set to False; verification_status is set to 'SYNTHETIC_BENCHMARK'.
+        3. Synthetic benchmarks never produce an official-verification outcome.
+        4. Fully idempotent: Checks by aicte_permanent_id before inserting; never duplicates records.
+        5. Touches only the three reference tables; preserves all existing application and audit data.
         """
-        existing_count = db.query(InstitutionReferenceRecord).count()
-        if existing_count > 0:
-            return existing_count
-
         now = datetime.utcnow()
         freshness_date = datetime(2026, 3, 31, 0, 0, 0)
 
-        # Benchmark 1: Premier Engineering Institute (Full clean approvals, continuous EoA)
-        ref1 = InstitutionReferenceRecord(
-            aicte_permanent_id="AICTE-INST-001",
-            legal_name="Delhi Institute of Technology & Advanced Sciences",
-            institution_type="Engineering",
-            state="Delhi",
-            district_or_city="New Delhi",
-            address="Plot 12, Institutional Area, Sector 4, Dwarka, New Delhi 110078",
-            standing_status="Approved",
-            established_year=2008,
-            initial_approval_year=2009,
-            latest_approval_year=2025,
-            verification_status="OFFICIAL_VERIFIED",
-            source_provenance=OFFICIAL_SOURCE,
-            source_document_ref="AICTE/NRC/1-100234561/2025/EOA",
-            data_freshness_date=freshness_date,
-            is_official=True,
-        )
-        db.add(ref1)
-        db.flush()
+        # -------------------------------------------------------------------
+        # Benchmark 1: Premier Engineering Institute (Full approvals, continuous EoA)
+        # -------------------------------------------------------------------
+        b1_id = "AICTE-INST-001"
+        if not db.query(InstitutionReferenceRecord).filter(
+            func.upper(InstitutionReferenceRecord.aicte_permanent_id) == b1_id
+        ).first():
+            ref1 = InstitutionReferenceRecord(
+                aicte_permanent_id=b1_id,
+                legal_name="Delhi Institute of Technology & Advanced Sciences",
+                institution_type="Engineering",
+                state="Delhi",
+                district_or_city="New Delhi",
+                address="Plot 12, Institutional Area, Sector 4, Dwarka, New Delhi 110078",
+                standing_status="Approved",
+                established_year=2008,
+                initial_approval_year=2009,
+                latest_approval_year=2025,
+                verification_status="SYNTHETIC_BENCHMARK",
+                source_provenance=DEMO_SOURCE,
+                source_document_ref=DEMO_DOC_REF,
+                data_freshness_date=freshness_date,
+                is_official=False,
+            )
+            db.add(ref1)
+            db.flush()
 
-        # Programmes for INST-001
-        p1_1 = ApprovedProgrammeReference(
-            institution_reference_id=ref1.id,
-            programme_name="Engineering and Technology",
-            course_name="Computer Science and Engineering",
-            level="UG",
-            approved_intake=180,
-            nri_quota_approved=False,
-            pio_fn_quota_approved=False,
-            accreditation_status="NBA Accredited",
-            accreditation_valid_until=datetime(2028, 6, 30),
-            academic_year="2025-2026",
-            is_active=True,
-        )
-        p1_2 = ApprovedProgrammeReference(
-            institution_reference_id=ref1.id,
-            programme_name="Engineering and Technology",
-            course_name="Electronics and Communication Engineering",
-            level="UG",
-            approved_intake=120,
-            nri_quota_approved=False,
-            pio_fn_quota_approved=False,
-            accreditation_status="NBA Accredited",
-            accreditation_valid_until=datetime(2027, 6, 30),
-            academic_year="2025-2026",
-            is_active=True,
-        )
-        db.add_all([p1_1, p1_2])
-
-        # Approval History for INST-001 (Continuous approvals)
-        for yr, intake, app_num in [
-            ("2023-2024", 300, "AICTE/NRC/1-100234561/2023/EOA"),
-            ("2024-2025", 300, "AICTE/NRC/1-100234561/2024/EOA"),
-            ("2025-2026", 300, "AICTE/NRC/1-100234561/2025/EOA"),
-        ]:
-            h = InstitutionApprovalHistory(
+            p1_1 = ApprovedProgrammeReference(
                 institution_reference_id=ref1.id,
-                academic_year=yr,
-                eoa_application_number=app_num,
-                eoa_issue_date=datetime(int(yr.split("-")[0]), 5, 20),
-                effective_start_date=datetime(int(yr.split("-")[0]), 7, 1),
-                effective_end_date=datetime(int(yr.split("-")[1]), 6, 30),
-                total_sanctioned_intake=intake,
-                approval_type="Extension of Approval",
-                issuing_authority="Member Secretary, AICTE New Delhi",
-                is_latest=(yr == "2025-2026"),
+                programme_name="Engineering and Technology",
+                course_name="Computer Science and Engineering",
+                level="UG",
+                approved_intake=180,
+                nri_quota_approved=False,
+                pio_fn_quota_approved=False,
+                accreditation_status="NBA Accredited",
+                accreditation_valid_until=datetime(2028, 6, 30),
+                academic_year="2025-2026",
+                is_active=True,
             )
-            db.add(h)
+            p1_2 = ApprovedProgrammeReference(
+                institution_reference_id=ref1.id,
+                programme_name="Engineering and Technology",
+                course_name="Electronics and Communication Engineering",
+                level="UG",
+                approved_intake=120,
+                nri_quota_approved=False,
+                pio_fn_quota_approved=False,
+                accreditation_status="NBA Accredited",
+                accreditation_valid_until=datetime(2027, 6, 30),
+                academic_year="2025-2026",
+                is_active=True,
+            )
+            db.add_all([p1_1, p1_2])
 
+            for yr, intake, app_num in [
+                ("2023-2024", 300, "AICTE/NRC/1-100234561/2023/EOA-DEMO"),
+                ("2024-2025", 300, "AICTE/NRC/1-100234561/2024/EOA-DEMO"),
+                ("2025-2026", 300, "AICTE/NRC/1-100234561/2025/EOA-DEMO"),
+            ]:
+                h = InstitutionApprovalHistory(
+                    institution_reference_id=ref1.id,
+                    academic_year=yr,
+                    eoa_application_number=app_num,
+                    eoa_issue_date=datetime(int(yr.split("-")[0]), 5, 20),
+                    effective_start_date=datetime(int(yr.split("-")[0]), 7, 1),
+                    effective_end_date=datetime(int(yr.split("-")[1]), 6, 30),
+                    total_sanctioned_intake=intake,
+                    approval_type="Extension of Approval",
+                    issuing_authority="Member Secretary, AICTE New Delhi",
+                    is_latest=(yr == "2025-2026"),
+                )
+                db.add(h)
+
+        # -------------------------------------------------------------------
         # Benchmark 2: Research Institute with Approved NRI Quota
-        ref2 = InstitutionReferenceRecord(
-            aicte_permanent_id="AICTE-INST-002",
-            legal_name="Maharashtra Institute of Technology & Research",
-            institution_type="Engineering",
-            state="Maharashtra",
-            district_or_city="Pune",
-            address="Paud Road, Kothrud, Pune, Maharashtra 411038",
-            standing_status="Approved",
-            established_year=2001,
-            initial_approval_year=2002,
-            latest_approval_year=2025,
-            verification_status="OFFICIAL_VERIFIED",
-            source_provenance=OFFICIAL_SOURCE,
-            source_document_ref="AICTE/WRO/1-100876122/2025/EOA",
-            data_freshness_date=freshness_date,
-            is_official=True,
-        )
-        db.add(ref2)
-        db.flush()
-
-        p2_1 = ApprovedProgrammeReference(
-            institution_reference_id=ref2.id,
-            programme_name="Engineering and Technology",
-            course_name="Mechanical Engineering",
-            level="UG",
-            approved_intake=120,
-            nri_quota_approved=True,
-            nri_quota_intake=18,
-            pio_fn_quota_approved=True,
-            pio_fn_quota_intake=18,
-            accreditation_status="NAAC A+",
-            accreditation_valid_until=datetime(2029, 12, 31),
-            academic_year="2025-2026",
-            is_active=True,
-        )
-        p2_2 = ApprovedProgrammeReference(
-            institution_reference_id=ref2.id,
-            programme_name="Engineering and Technology",
-            course_name="Artificial Intelligence and Data Science",
-            level="UG",
-            approved_intake=60,
-            nri_quota_approved=True,
-            nri_quota_intake=9,
-            pio_fn_quota_approved=False,
-            pio_fn_quota_intake=0,
-            accreditation_status="Non-Accredited",
-            academic_year="2025-2026",
-            is_active=True,
-        )
-        db.add_all([p2_1, p2_2])
-
-        for yr, intake, app_num in [
-            ("2024-2025", 180, "AICTE/WRO/1-100876122/2024/EOA"),
-            ("2025-2026", 180, "AICTE/WRO/1-100876122/2025/EOA"),
-        ]:
-            h = InstitutionApprovalHistory(
-                institution_reference_id=ref2.id,
-                academic_year=yr,
-                eoa_application_number=app_num,
-                eoa_issue_date=datetime(int(yr.split("-")[0]), 5, 15),
-                effective_start_date=datetime(int(yr.split("-")[0]), 7, 1),
-                effective_end_date=datetime(int(yr.split("-")[1]), 6, 30),
-                total_sanctioned_intake=intake,
-                approval_type="Extension of Approval",
-                issuing_authority="Regional Officer, AICTE WRO Mumbai",
-                is_latest=(yr == "2025-2026"),
+        # -------------------------------------------------------------------
+        b2_id = "AICTE-INST-002"
+        if not db.query(InstitutionReferenceRecord).filter(
+            func.upper(InstitutionReferenceRecord.aicte_permanent_id) == b2_id
+        ).first():
+            ref2 = InstitutionReferenceRecord(
+                aicte_permanent_id=b2_id,
+                legal_name="Maharashtra Institute of Technology & Research",
+                institution_type="Engineering",
+                state="Maharashtra",
+                district_or_city="Pune",
+                address="Paud Road, Kothrud, Pune, Maharashtra 411038",
+                standing_status="Approved",
+                established_year=2001,
+                initial_approval_year=2002,
+                latest_approval_year=2025,
+                verification_status="SYNTHETIC_BENCHMARK",
+                source_provenance=DEMO_SOURCE,
+                source_document_ref=DEMO_DOC_REF,
+                data_freshness_date=freshness_date,
+                is_official=False,
             )
-            db.add(h)
+            db.add(ref2)
+            db.flush()
 
+            p2_1 = ApprovedProgrammeReference(
+                institution_reference_id=ref2.id,
+                programme_name="Engineering and Technology",
+                course_name="Mechanical Engineering",
+                level="UG",
+                approved_intake=120,
+                nri_quota_approved=True,
+                nri_quota_intake=18,
+                pio_fn_quota_approved=True,
+                pio_fn_quota_intake=18,
+                accreditation_status="NAAC A+",
+                accreditation_valid_until=datetime(2029, 12, 31),
+                academic_year="2025-2026",
+                is_active=True,
+            )
+            p2_2 = ApprovedProgrammeReference(
+                institution_reference_id=ref2.id,
+                programme_name="Engineering and Technology",
+                course_name="Artificial Intelligence and Data Science",
+                level="UG",
+                approved_intake=60,
+                nri_quota_approved=True,
+                nri_quota_intake=9,
+                pio_fn_quota_approved=False,
+                pio_fn_quota_intake=0,
+                accreditation_status="Non-Accredited",
+                academic_year="2025-2026",
+                is_active=True,
+            )
+            db.add_all([p2_1, p2_2])
+
+            for yr, intake, app_num in [
+                ("2024-2025", 180, "AICTE/WRO/1-100876122/2024/EOA-DEMO"),
+                ("2025-2026", 180, "AICTE/WRO/1-100876122/2025/EOA-DEMO"),
+            ]:
+                h = InstitutionApprovalHistory(
+                    institution_reference_id=ref2.id,
+                    academic_year=yr,
+                    eoa_application_number=app_num,
+                    eoa_issue_date=datetime(int(yr.split("-")[0]), 5, 15),
+                    effective_start_date=datetime(int(yr.split("-")[0]), 7, 1),
+                    effective_end_date=datetime(int(yr.split("-")[1]), 6, 30),
+                    total_sanctioned_intake=intake,
+                    approval_type="Extension of Approval",
+                    issuing_authority="Regional Officer, AICTE WRO Mumbai",
+                    is_latest=(yr == "2025-2026"),
+                )
+                db.add(h)
+
+        # -------------------------------------------------------------------
         # Benchmark 3: Management Institute
-        ref3 = InstitutionReferenceRecord(
-            aicte_permanent_id="AICTE-INST-003",
-            legal_name="Karnataka Global School of Management",
-            institution_type="Management",
-            state="Karnataka",
-            district_or_city="Bengaluru",
-            address="Electronic City Phase 1, Hosur Road, Bengaluru 560100",
-            standing_status="Approved",
-            established_year=2014,
-            initial_approval_year=2015,
-            latest_approval_year=2025,
-            verification_status="OFFICIAL_VERIFIED",
-            source_provenance=OFFICIAL_SOURCE,
-            source_document_ref="AICTE/SWRO/1-209983411/2025/EOA",
-            data_freshness_date=freshness_date,
-            is_official=True,
-        )
-        db.add(ref3)
-        db.flush()
+        # -------------------------------------------------------------------
+        b3_id = "AICTE-INST-003"
+        if not db.query(InstitutionReferenceRecord).filter(
+            func.upper(InstitutionReferenceRecord.aicte_permanent_id) == b3_id
+        ).first():
+            ref3 = InstitutionReferenceRecord(
+                aicte_permanent_id=b3_id,
+                legal_name="Karnataka Global School of Management",
+                institution_type="Management",
+                state="Karnataka",
+                district_or_city="Bengaluru",
+                address="Electronic City Phase 1, Hosur Road, Bengaluru 560100",
+                standing_status="Approved",
+                established_year=2014,
+                initial_approval_year=2015,
+                latest_approval_year=2025,
+                verification_status="SYNTHETIC_BENCHMARK",
+                source_provenance=DEMO_SOURCE,
+                source_document_ref=DEMO_DOC_REF,
+                data_freshness_date=freshness_date,
+                is_official=False,
+            )
+            db.add(ref3)
+            db.flush()
 
-        p3_1 = ApprovedProgrammeReference(
-            institution_reference_id=ref3.id,
-            programme_name="Management",
-            course_name="Master of Business Administration (MBA)",
-            level="PG",
-            approved_intake=120,
-            nri_quota_approved=False,
-            pio_fn_quota_approved=False,
-            accreditation_status="NBA Accredited",
-            accreditation_valid_until=datetime(2027, 6, 30),
-            academic_year="2025-2026",
-            is_active=True,
-        )
-        db.add(p3_1)
+            p3_1 = ApprovedProgrammeReference(
+                institution_reference_id=ref3.id,
+                programme_name="Management",
+                course_name="Master of Business Administration (MBA)",
+                level="PG",
+                approved_intake=120,
+                nri_quota_approved=False,
+                pio_fn_quota_approved=False,
+                accreditation_status="NBA Accredited",
+                accreditation_valid_until=datetime(2027, 6, 30),
+                academic_year="2025-2026",
+                is_active=True,
+            )
+            db.add(p3_1)
 
-        h3 = InstitutionApprovalHistory(
-            institution_reference_id=ref3.id,
-            academic_year="2025-2026",
-            eoa_application_number="AICTE/SWRO/1-209983411/2025/EOA",
-            eoa_issue_date=datetime(2025, 6, 1),
-            effective_start_date=datetime(2025, 7, 1),
-            effective_end_date=datetime(2026, 6, 30),
-            total_sanctioned_intake=120,
-            approval_type="Extension of Approval",
-            issuing_authority="Regional Officer, AICTE SWRO",
-            is_latest=True,
-        )
-        db.add(h3)
+            h3 = InstitutionApprovalHistory(
+                institution_reference_id=ref3.id,
+                academic_year="2025-2026",
+                eoa_application_number="AICTE/SWRO/1-209983411/2025/EOA-DEMO",
+                eoa_issue_date=datetime(2025, 6, 1),
+                effective_start_date=datetime(2025, 7, 1),
+                effective_end_date=datetime(2026, 6, 30),
+                total_sanctioned_intake=120,
+                approval_type="Extension of Approval",
+                issuing_authority="Regional Officer, AICTE SWRO",
+                is_latest=True,
+            )
+            db.add(h3)
 
+        # -------------------------------------------------------------------
         # Benchmark 4: Outdated Approval Institute (Gap detected, last approval 2023-2024)
-        ref4 = InstitutionReferenceRecord(
-            aicte_permanent_id="AICTE-INST-OUTDATED",
-            legal_name="Heritage Polytechnic and Vocational College",
-            institution_type="Polytechnic",
-            state="Uttar Pradesh",
-            district_or_city="Lucknow",
-            address="Vikas Nagar, Ring Road, Lucknow 226022",
-            standing_status="Under Scrutiny",
-            established_year=2005,
-            initial_approval_year=2006,
-            latest_approval_year=2023,
-            verification_status="OFFICIAL_VERIFIED",
-            source_provenance=OFFICIAL_SOURCE,
-            source_document_ref="AICTE/NRC/1-443322110/2023/EOA",
-            data_freshness_date=datetime(2024, 3, 31),
-            is_official=True,
-        )
-        db.add(ref4)
-        db.flush()
+        # -------------------------------------------------------------------
+        b4_id = "AICTE-INST-OUTDATED"
+        if not db.query(InstitutionReferenceRecord).filter(
+            func.upper(InstitutionReferenceRecord.aicte_permanent_id) == b4_id
+        ).first():
+            ref4 = InstitutionReferenceRecord(
+                aicte_permanent_id=b4_id,
+                legal_name="Heritage Polytechnic and Vocational College",
+                institution_type="Polytechnic",
+                state="Uttar Pradesh",
+                district_or_city="Lucknow",
+                address="Vikas Nagar, Ring Road, Lucknow 226022",
+                standing_status="Approved",
+                established_year=2005,
+                initial_approval_year=2006,
+                latest_approval_year=2023,
+                verification_status="SYNTHETIC_BENCHMARK",
+                source_provenance=DEMO_SOURCE,
+                source_document_ref=DEMO_DOC_REF,
+                data_freshness_date=datetime(2024, 3, 31),
+                is_official=False,
+            )
+            db.add(ref4)
+            db.flush()
 
-        h4 = InstitutionApprovalHistory(
-            institution_reference_id=ref4.id,
-            academic_year="2023-2024",
-            eoa_application_number="AICTE/NRC/1-443322110/2023/EOA",
-            eoa_issue_date=datetime(2023, 6, 10),
-            effective_start_date=datetime(2023, 7, 1),
-            effective_end_date=datetime(2024, 6, 30),
-            total_sanctioned_intake=60,
-            approval_type="Extension of Approval",
-            issuing_authority="Member Secretary, AICTE",
-            is_latest=True,
-        )
-        db.add(h4)
+            h4 = InstitutionApprovalHistory(
+                institution_reference_id=ref4.id,
+                academic_year="2023-2024",
+                eoa_application_number="AICTE/NRC/1-443322110/2023/EOA-DEMO",
+                eoa_issue_date=datetime(2023, 6, 10),
+                effective_start_date=datetime(2023, 7, 1),
+                effective_end_date=datetime(2024, 6, 30),
+                total_sanctioned_intake=60,
+                approval_type="Extension of Approval",
+                issuing_authority="Member Secretary, AICTE",
+                is_latest=True,
+            )
+            db.add(h4)
+
+        # -------------------------------------------------------------------
+        # Benchmark 5: Disciplinary Action Institute (Adverse Standing)
+        # -------------------------------------------------------------------
+        b5_id = "AICTE-INST-DEFICIENT"
+        if not db.query(InstitutionReferenceRecord).filter(
+            func.upper(InstitutionReferenceRecord.aicte_permanent_id) == b5_id
+        ).first():
+            ref5 = InstitutionReferenceRecord(
+                aicte_permanent_id=b5_id,
+                legal_name="Apex Global Academy of Technology",
+                institution_type="Engineering",
+                state="Tamil Nadu",
+                district_or_city="Chennai",
+                address="Old Mahabalipuram Road, Chennai 600119",
+                standing_status="Under Scrutiny",
+                established_year=2010,
+                initial_approval_year=2011,
+                latest_approval_year=2024,
+                verification_status="SYNTHETIC_BENCHMARK",
+                source_provenance=DEMO_SOURCE,
+                source_document_ref=DEMO_DOC_REF,
+                data_freshness_date=datetime(2025, 3, 31),
+                is_official=False,
+            )
+            db.add(ref5)
+            db.flush()
 
         db.commit()
-        return 4
+        return db.query(InstitutionReferenceRecord).count()
 
     @classmethod
     def find_reference_record(
@@ -283,11 +337,17 @@ class ReferenceDataService:
         Resolves official reference record. Prioritizes exact permanent identifier lookup,
         falling back to normalized name + city + state composite matching.
         """
-        # 1. Primary lookup: Permanent AICTE Identifier
+        # 1. Primary lookup: Permanent AICTE Identifier (supports DEMO and INST aliases)
         if identifier:
             cleaned_id = identifier.strip().upper()
+            alias_id = cleaned_id.replace("AICTE-DEMO-", "AICTE-INST-")
+            alt_alias_id = cleaned_id.replace("AICTE-INST-", "AICTE-DEMO-")
             ref = db.query(InstitutionReferenceRecord).filter(
-                func.upper(InstitutionReferenceRecord.aicte_permanent_id) == cleaned_id
+                or_(
+                    func.upper(InstitutionReferenceRecord.aicte_permanent_id) == cleaned_id,
+                    func.upper(InstitutionReferenceRecord.aicte_permanent_id) == alias_id,
+                    func.upper(InstitutionReferenceRecord.aicte_permanent_id) == alt_alias_id,
+                )
             ).first()
             if ref:
                 return ref
@@ -491,7 +551,7 @@ class ReferenceDataService:
                     "severity": "CRITICAL",
                     "message": "Institution has submitted an NRI / Foreign National Quota application, but regulatory records show no existing approved quota allocation for any active programme.",
                     "reference_source": ref.source_provenance,
-                    "effective_date": ref.data_freshness_date.strftime("%Y-%m-%d"),
+                    "effective_date": ref.data_freshness_date.strftime("%Y-%m-%d") if ref.data_freshness_date else None,
                 })
             else:
                 findings.append({
@@ -499,8 +559,51 @@ class ReferenceDataService:
                     "severity": "INFO",
                     "message": "Verified official reference records confirm prior approval for NRI / PIO / FN quota seats.",
                     "reference_source": ref.source_provenance,
-                    "effective_date": ref.data_freshness_date.strftime("%Y-%m-%d"),
+                    "effective_date": ref.data_freshness_date.strftime("%Y-%m-%d") if ref.data_freshness_date else None,
                 })
+
+        # 5. Programme and Sanctioned Intake Verification (Increase in Intake category)
+        if app.application_category == "Increase in Intake":
+            if not active_programmes:
+                findings.append({
+                    "finding_type": "PROGRAMME_INTAKE_MISMATCH",
+                    "severity": "CRITICAL",
+                    "message": "Application submitted for Increase in Intake, but reference ledger records zero approved active programmes for this institution.",
+                    "reference_source": ref.source_provenance,
+                    "effective_date": ref.data_freshness_date.strftime("%Y-%m-%d") if ref.data_freshness_date else None,
+                })
+            else:
+                nba_progs = [p for p in active_programmes if p.accreditation_status and "NBA" in p.accreditation_status.upper()]
+                if not nba_progs:
+                    findings.append({
+                        "finding_type": "PROGRAMME_INTAKE_MISMATCH",
+                        "severity": "WARNING",
+                        "message": "AICTE Chapter II norms mandate valid NBA accreditation for intake expansion. None of the active programmes on record hold valid NBA accreditation.",
+                        "reference_source": ref.source_provenance,
+                        "effective_date": ref.data_freshness_date.strftime("%Y-%m-%d") if ref.data_freshness_date else None,
+                    })
+                else:
+                    findings.append({
+                        "finding_type": "REFERENCE_VERIFIED",
+                        "severity": "INFO",
+                        "message": f"Accreditation prerequisite verified: {len(nba_progs)} approved programme(s) have NBA accreditation eligible for intake expansion.",
+                        "reference_source": ref.source_provenance,
+                        "effective_date": ref.data_freshness_date.strftime("%Y-%m-%d") if ref.data_freshness_date else None,
+                    })
+
+        # 6. Authenticity Guard: Synthetic Demonstration Benchmark vs Official Statutory Record
+        if not ref.is_official or ref.verification_status != "OFFICIAL_VERIFIED":
+            findings.append({
+                "finding_type": "SYNTHETIC_REFERENCE_BENCHMARK",
+                "severity": "WARNING",
+                "message": (
+                    f"Reference record for '{ref.aicte_permanent_id}' is a synthetic demonstration benchmark, "
+                    "not an authentic live AICTE Central Portal record. Cannot establish official statutory verification. "
+                    "Routing to Manual Scrutiny Queue."
+                ),
+                "reference_source": ref.source_provenance,
+                "effective_date": ref.data_freshness_date.strftime("%Y-%m-%d") if ref.data_freshness_date else None,
+            })
 
         # Determine overall recommendation
         has_critical = any(f["severity"] == "CRITICAL" for f in findings)
@@ -509,6 +612,10 @@ class ReferenceDataService:
         if has_critical:
             recommendation = "REJECT_UNAUTHORIZED"
             status_str = "MISMATCH_DETECTED"
+        elif not ref.is_official or ref.verification_status == "SYNTHETIC_BENCHMARK":
+            # Synthetic benchmarks must NEVER produce an official verification outcome
+            recommendation = "MANUAL_SCRUTINY_REQUIRED"
+            status_str = "SYNTHETIC_BENCHMARK"
         elif has_warning:
             recommendation = "MANUAL_SCRUTINY_REQUIRED"
             status_str = "PROVISIONAL_PENDING"
